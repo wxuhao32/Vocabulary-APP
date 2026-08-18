@@ -1,0 +1,56 @@
+# ============ 构建产物 ============
+# Gradle / Android
+.gradle/
+build/
+app/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+app/.cxx/
+local.properties
+*.jks
+*.keystore
+
+# Kotlin
+.kotlin/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# ============ 工具缓存 / IDE ============
+.idea/
+*.iml
+.vscode/
+.workbuddy/
+.DS_Store
+Thumbs.db
+
+# ============ 日志与临时文件 ============
+*.log
+*.tmp
+*.bak
+*.swp
+
+# ============ 后端运行时（敏感 / 用户数据 / 体积大） ============
+# 管理员凭证 + JWT 密钥（首次启动自动生成）
+server/.admin_credentials.txt
+server/.admin_credentials.txt.*
+server/.secret_key
+# 运行数据：SQLite + 上传文件 + 发布 APK（含真实用户数据）
+server/data/
+# Python 虚拟环境
+server/.venv/
+venv/
+# 公网 Tunnel 配置（含当前公网地址）
+server/tunnel_config.json
+# Cloudflared 客户端二进制（首次运行下载脚本获取）
+server/tunnel/cloudflared.exe
+server/tunnel/cloudflared.log
+
+# ========== 桌面启动脚本（按需放回） ==========
+# 启动*.bat
+启动*.bat

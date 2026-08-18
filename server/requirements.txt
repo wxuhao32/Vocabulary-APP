@@ -1,0 +1,6 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+argon2-cffi>=23.1
+PyJWT>=2.8
+pillow>=10.0
+python-multipart>=0.0.9

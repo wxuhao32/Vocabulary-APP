@@ -1,0 +1,89 @@
+plugins {
+    id 'com.android.application' version '8.5.2'
+    id 'org.jetbrains.kotlin.android' version '2.3.0'
+}
+
+android {
+    namespace 'com.example.cet4'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.example.cet4'
+        minSdk 26
+        targetSdk 34
+        /* v9.77：版本号从 8.1 → 9.77（此前一直没更新，用户无法区分装的哪个包！
+           排查随机采样问题时发现日志无 reprompt 标记 = 装的还是旧版）
+           v9.81：同步 CHANGELOG 版本（9.77 → 9.81），修复本地模型保活 bug 后让用户能区分新旧包
+           v9.82：修复两个显示 bug（思考预算刻度 / 开始背词按钮数字），让用户能区分新旧包
+           v9.83：账户中心 / 登录 UI（增量 1 纯前端），让用户能区分新旧包
+           v9.84：登录/账户页返回键支持 + 返回箭头朝左，让用户能区分新旧包
+           v9.85：接入真实本地认证（FastAPI + SQLite + JWT），让用户能区分新旧包
+           v9.86：登录失败限流 + 密码强度校验（防御加固），让用户能区分新旧包
+           v9.87：社交模块（好友 / 私聊 / 文件 / 通知），让用户能区分新旧包
+           v9.88：修复登录页 tab 切换失效，让用户能区分新旧包
+           v9.89：UI/UX 全局优化 + 社交增强，让用户能区分新旧包
+           v9.90：社交 UI 细节修正，让用户能区分新旧包
+           v9.91：系统通知栏 + 消息撤回 + 消息已读，让用户能区分新旧包
+           v9.92：修复聊天头像显示，让用户能区分新旧包
+           v9.93：独立管理员系统（隐藏双因素认证 + Admin Dashboard + 用户封禁），让用户能区分新旧包
+           v9.94：通知中心（99条上限+懒加载+单条已读）+ 全局页面返回栈，让用户能区分新旧包
+           v9.95：封禁扩展（时长/原因/自动解封）+ 客户端版本更新检测（可选/强制），让用户能区分新旧包
+           v9.96：通知左滑删除 + 聊天记录删除/清空 + 聊天背景 + 头像裁剪，让用户能区分新旧包
+           v9.97：版本更新链路修复（原生下载安装桥 + 每次启动检查），让用户能区分新旧包
+           v9.110：消息通信升级为 WebSocket 实时（登录建连/自动重连/离线补同步），让用户能区分新旧包
+           v9.111：滑块验证码稳定性修复（松手坐标重算 + 服务端调试日志 + IPv6 适配），让用户能区分新旧包
+           v9.112：消息系统通知服务（原生 WS + 前台服务，App 后台/离线保障通知栏推送），让用户能区分新旧包
+           v9.113：聊天体验优化（软键盘适配/乐观发送/状态文字可读性/@对方），让用户能区分新旧包
+           v9.114：自己消息深色文字 + 键盘跟随双信号 + 通知栏格式修复，让用户能区分新旧包
+           v9.115：日志诊断模式（消息生命周期/通知/键盘全链路日志上报服务端），让用户能区分新旧包
+           v9.117：聊天会话体验优化（发送后输入法保持展开 / 文件上传圆形进度环 + 失败重试 / 图片发送本地立即显示 / 文件下载进度反馈 + 真机保存到设备），让用户能区分新旧包
+           v9.118：系统通知栏完善 + 修复跨会话泄漏（pending/ack 会话成员过滤 + 排除已读 + 服务通知低调化）
+           v9.119：语音消息（按开闭原则扩展——复用文件上传/消息持久化/WS 实时通道；新增 mic/pause/keyboard 图标 + 录音条 UI + MediaRecorder 录制 + 上滑取消 + 语音条播放缓存）*/
+        versionCode 88
+        versionName '9.123'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            minifyEnabled false
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig false
+    }
+
+    packagingOptions {
+        jniLibs {
+            pickFirsts += ['**/*.so']
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+dependencies {
+    // 本地模型推理：LiteRT-LM（.litertlm 格式，Gemma 4 官方路线）
+    // v9.80.1：固定 0.15.0（原 latest.release 动态版本会让别人构建时拉到更新的 SDK，导致行为不一致）
+    implementation 'com.google.ai.edge.litertlm:litertlm-android:0.15.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+    // v9.35：targetSdk 34 下 Activity.onBackPressed 不再被系统调用（predictive back 走 OnBackPressedDispatcher），
+    // 依赖 androidx.activity 注册 OnBackPressedCallback 才能接管返回键
+    implementation 'androidx.activity:activity:1.8.0'
+    // v9.112：NotifyService 原生 WebSocket 客户端（App 后台/离线时系统通知栏推送，独立于 WebView）
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+}

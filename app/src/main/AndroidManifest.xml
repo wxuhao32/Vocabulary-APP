@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- v9.78：本地模型保活前台服务（模型常驻内存，防切后台被系统回收） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- v9.112：消息通知服务（原生 WS + 前台服务 dataSync，App 后台时保障系统通知栏推送） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"
+        android:maxSdkVersion="33" />
+
+    <application
+        android:allowBackup="true"
+        android:largeHeap="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/Theme.CET4"
+        android:enableOnBackInvokedCallback="false">
+        <!-- v9.35：enableOnBackInvokedCallback=false 禁用 predictive back 预览动画——
+            targetSdk 34 下全面屏手势返回先显示系统预览动画且不触发 OnBackPressedCallback，
+            表现为"按返回没反应"；禁用后返回事件走传统路径立即回调前端钩子 -->
+
+        <!-- LiteRT-LM GPU 后端需要的原生库（缺失时自动回退 CPU → 内存暴涨被杀，且无法 GPU 加速） -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL-pixel.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL-car.so" android:required="false" />
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|locale|uiMode"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".ReminderReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- v9.78：本地模型保活前台服务（specialUse 类型，模型加载期间常驻提升进程优先级） -->
+        <service
+            android:name=".ModelKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="keep_llm_model_resident_in_memory" />
+        </service>
+
+        <!-- v9.112：消息通知服务（dataSync 前台服务 + 原生 WebSocket，App 后台/离线时系统通知栏推送） -->
+        <service
+            android:name=".NotifyService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
+
+    <!-- v9.119：语音消息录制（WebView getUserMedia 麦克风） -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- v9.122：部分设备 WebView 录音需调整音频路由设置 -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+</manifest>
