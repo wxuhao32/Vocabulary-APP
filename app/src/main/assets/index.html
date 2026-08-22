@@ -882,6 +882,22 @@ hr.sep{border:none;border-top:1px dashed var(--line);margin:14px 0}
 /* 聊天页通话记录（居中系统行） */
 .msg-call{display:flex;align-items:center;justify-content:center;gap:6px;margin:10px auto 2px;max-width:78%;width:-webkit-fit-content;width:fit-content;padding:6px 13px;border-radius:999px;background:var(--bg-2);color:var(--ink-3);font-size:12px;font-weight:600}
 .msg-call .ic{color:var(--ink-3)}
+/* ============ v9.129：视频通话 ============ */
+/* 远端全屏画面：z-index 低于 call-page(220)，视频模式通话页背景转半透明遮罩露出视频 */
+#callRemoteVideo{position:fixed;inset:0;z-index:219;width:100%;height:100%;object-fit:cover;background:#0A0E14}
+/* 本地预览小窗：悬浮右上角（安全区避让） */
+#callLocalVideo{position:fixed;z-index:223;width:104px;height:148px;object-fit:cover;border-radius:14px;background:#10151D;border:2px solid rgba(255,255,255,.35);box-shadow:0 10px 28px rgba(0,0,0,.5);top:calc(64px + env(safe-area-inset-top));right:14px}
+/* 视频模式通话页：背景转遮罩（远端视频从下层透出）；中部信息靠上给视频留空间 */
+.call-page.vid{background:linear-gradient(180deg,rgba(6,10,16,.55) 0%,rgba(6,10,16,.12) 34%,rgba(6,10,16,.28) 72%,rgba(6,10,16,.72) 100%)}
+.call-page.vid .call-mid{justify-content:flex-start;padding-top:10px}
+.call-page.vid .call-av,.call-page.vid .call-av-ic{width:62px;height:62px;margin-bottom:10px;box-shadow:0 0 0 6px rgba(255,255,255,.08),0 10px 26px rgba(0,0,0,.4)}
+.call-page.vid .call-nm{font-size:17px;text-shadow:0 2px 10px rgba(0,0,0,.6)}
+.call-page.vid .call-timer{font-size:17px;margin-top:8px;text-shadow:0 2px 10px rgba(0,0,0,.6)}
+.call-page.vid .call-btns{gap:22px}
+.call-page.vid .call-fab{width:54px;height:54px}
+.call-page.vid .call-fab.red{width:60px;height:60px}
+/* 视频模式且摄像头关闭：本地小窗提示 */
+#callLocalVideo.camoff{background:#1A2230}
 /* 登录 / 账户二级页（全屏覆盖层） */
 .login-page{position:fixed;inset:0;z-index:120;background:var(--bg);display:none;flex-direction:column;overflow-y:auto}
 .login-page.on{display:flex}
@@ -1195,6 +1211,10 @@ hr.sep{border:none;border-top:1px dashed var(--line);margin:14px 0}
 <!-- v9.125：语音通话全屏页（来电 / 呼出 / 通话中）+ 远端音频播放元素 -->
 <div id="callPage" class="call-page"></div>
 <audio id="callRemote" autoplay playsinline style="display:none"></audio>
+<!-- v9.129：视频通话——远端全屏画面（z 低于 call-page，视频模式通话页背景变半透明遮罩露出视频） -->
+<video id="callRemoteVideo" autoplay playsinline style="display:none"></video>
+<!-- 本地预览小窗（muted 防自 hearing） -->
+<video id="callLocalVideo" autoplay playsinline muted style="display:none"></video>
 
 <!-- AI 查词（全屏界面，默认隐藏，屏幕顶部下滑弹出） -->
 <div class="aipanel" id="aipanel">
@@ -1524,6 +1544,8 @@ var ICONS={
  /* v9.124/v9.125：通话图标（听筒 / 摄像机 / 挂断 / 静麦 / 扬声器） */
  call:'<path d="M21.2 16.6v2.7a2 2 0 0 1-2.2 2 19.2 19.2 0 0 1-8.4-3 19 19 0 0 1-5.8-5.8 19.2 19.2 0 0 1-3-8.4 2 2 0 0 1 2-2.2h2.7a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.4 2.1l-1.1 1.1a15.4 15.4 0 0 0 5.8 5.8l1.1-1.1a2 2 0 0 1 2.1-.4c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/>',
  video:'<rect x="2.8" y="6.4" width="12.4" height="11.2" rx="2.6"/><path d="M15.2 10.6l5.2-3v8.8l-5.2-3"/>',
+ videoOff:'<rect x="2.8" y="6.4" width="12.4" height="11.2" rx="2.6"/><path d="M15.2 10.6l5.2-3v8.8l-5.2-3"/><path d="M3.2 3.2l17.6 17.6"/>',
+ camFlip:'<path d="M20.4 12a8.4 8.4 0 0 1-14.4 5.9M3.6 12a8.4 8.4 0 0 1 14.4-5.9"/><path d="M18.6 2.8v3.6h-3.6M5.4 21.2v-3.6H9"/>',
  phoneOff:'<path d="M21.2 16.6v2.7a2 2 0 0 1-2.2 2 19.2 19.2 0 0 1-8.4-3 19 19 0 0 1-5.8-5.8 19.2 19.2 0 0 1-3-8.4 2 2 0 0 1 2-2.2h2.7a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.4 2.1l-1.1 1.1a15.4 15.4 0 0 0 5.8 5.8l1.1-1.1a2 2 0 0 1 2.1-.4c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/><path d="M3.2 3.2l17.6 17.6"/>',
  micOff:'<rect x="9" y="3.4" width="6" height="10.6" rx="3"/><path d="M5.4 11.4a6.6 6.6 0 0 0 13.2 0"/><path d="M12 18v2.8"/><path d="M4 4l16 16"/>',
  speaker:'<path d="M4 9.4v5.2h3.6L12 18.6V5.4L7.6 9.4z"/><path d="M15.4 9.2a4.1 4.1 0 0 1 0 5.6"/><path d="M18.1 6.4a8 8 0 0 1 0 11.2"/>'
@@ -5200,16 +5222,18 @@ function chatMsgHtml(m){
       '<div class="msg-col"><div class="msg-revoked">'+tip+'</div><div class="msg-t">'+t+'</div></div></div>';
   }
   var body;
-  /* v9.125：通话记录（居中系统行，无头像/已读；content 为 JSON {event,duration}） */
+  /* v9.125：通话记录（居中系统行，无头像/已读；content 为 JSON {event,duration,media}）
+     v9.129：media=video → 视频通话图标与文案 */
   if(m.type==="call"){
-    var ev="", cdur=0;
-    try{ var co=JSON.parse(m.content||"{}"); ev=co.event||""; cdur=parseInt(co.duration||0,10)||0; }catch(e){}
-    var ctxt = ev==="end" ? "通话 "+callFmtDur(cdur)
-             : ev==="missed" ? "未接听"
+    var ev="", cdur=0, cvmd="";
+    try{ var co=JSON.parse(m.content||"{}"); ev=co.event||""; cdur=parseInt(co.duration||0,10)||0; cvmd=co.media||"audio"; }catch(e){}
+    var cpre = cvmd==="video" ? "视频通话" : "通话";
+    var ctxt = ev==="end" ? cpre+" "+callFmtDur(cdur)
+             : ev==="missed" ? (cvmd==="video"?"视频通话未接听":"未接听")
              : ev==="rejected" ? "已拒绝"
-             : ev==="canceled" ? "已取消" : "通话";
+             : ev==="canceled" ? "已取消" : cpre;
     return '<div class="msg-row '+m.sender+'" data-mid="'+m.id+'" data-me="'+(isMe?"1":"0")+'" data-revoked="0" data-ct="'+esc(m.created_at||"")+'">'+
-      '<div class="msg-call">'+icon("call",13)+'<span>'+esc(ctxt)+'</span><span>'+t+'</span></div></div>';
+      '<div class="msg-call">'+icon(cvmd==="video"?"video":"call",13)+'<span>'+esc(ctxt)+'</span><span>'+t+'</span></div></div>';
   }
   if(m.type==="file"){
     var name=(m.content||"").replace(/^\[文件\]\s*/,"");
@@ -6200,18 +6224,24 @@ var CALL_NOANSWER_MS=45000;   /* 主叫 45s 无应答自动取消（未接听）
 /* v9.127：显式开启回声消除/降噪/自动增益 —— 双方扬声器外放时抑制声学回授（回音/啸叫）
    v9.128：强制单声道（channelCount:1）—— AEC 参考信号对齐更稳，立体声回音消除难度高 */
 var CALL_GUM_OPT={audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}};
-/* v9.122 经验复用：首次 getUserMedia 失败（NotReadableError）用关闭处理组件的降级约束重试一次 */
-function callGum(cb){
-  navigator.mediaDevices.getUserMedia(CALL_GUM_OPT).then(cb).catch(function(e1){
+/* v9.122 经验复用：首次 getUserMedia 失败（NotReadableError）用关闭处理组件的降级约束重试一次
+   v9.129：支持传入完整约束（视频通话 {audio,video}）；降级重试保留视频轨但放宽分辨率 */
+function callGum(cb, opts, failCb){
+  var o = opts || CALL_GUM_OPT;
+  var isVid = !!(o && o.video);
+  navigator.mediaDevices.getUserMedia(o).then(cb).catch(function(e1){
     if(e1 && e1.name==="NotReadableError"){
-      navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
-        .then(cb).catch(function(){ toast("无法访问麦克风，请检查权限","warn"); });
+      var fb={audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}};
+      if(isVid) fb.video={facingMode:"user"};
+      navigator.mediaDevices.getUserMedia(fb)
+        .then(cb).catch(function(){ toast(isVid?"无法访问摄像头/麦克风，请检查权限":"无法访问麦克风，请检查权限","warn"); if(failCb) failCb(); });
     } else {
-      toast("无法访问麦克风（"+((e1&&e1.name)||"未知错误")+"），请检查权限","warn");
+      toast((isVid?"无法访问摄像头/麦克风（":"无法访问麦克风（")+((e1&&e1.name)||"未知错误")+"），请检查权限","warn");
+      if(failCb) failCb();
     }
   });
 }
-/* 入口：个人主页「通话」弹窗（语音已实现 / 视频开发中） */
+/* 入口：个人主页「通话」弹窗（语音 / 视频） */
 function profileCall(){
   var items=
     '<button class="btn btn-block" style="margin-bottom:8px" data-act="callVoice">'+icon("call",15)+'语音通话</button>'+
@@ -6219,25 +6249,34 @@ function profileCall(){
   openModal("发起通话", items,
     '<button class="btn btn-g" data-mclose="1">取消</button>');
 }
-/* 语音通话发起（主叫）：先拿麦克风 → WS 发 call_invite → 等对方接听 */
-function voiceCallStart(pid,nm,av){
+/* 通话发起（主叫）：先拿麦克风/摄像头 → WS 发 call_invite → 等对方接听
+   v9.129：media 参数区分 audio/video（视频=音频约束 + 前置摄像头） */
+var CALL_GUM_VIDEO={audio:CALL_GUM_OPT.audio, video:{facingMode:"user", width:{ideal:640}, height:{ideal:480}, frameRate:{ideal:20}}};
+function voiceCallStart(pid,nm,av,media){
   if(!pid) return;
+  var isVid = media==="video";
   if(callState){ toast("当前已在通话中","warn"); return; }
   if(!wsState.connected || !wsState.ws || wsState.ws.readyState!==1){ toast("网络连接未就绪，请稍后再试","warn"); return; }
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.RTCPeerConnection){
-    toast("当前环境不支持语音通话","warn"); return;
+    toast("当前环境不支持"+(isVid?"视频":"语音")+"通话","warn"); return;
   }
   closeModal();
-  toast("正在开启麦克风…","info");
+  toast(isVid?"正在开启摄像头和麦克风…":"正在开启麦克风…","info");
   callGum(function(stream){
     if(callState){ try{ stream.getTracks().forEach(function(t){t.stop();}); }catch(e){} return; }
     var cid=uid();
     callState={id:cid, pid:pid, nm:nm||"对方", av:av||"", role:"caller", status:"dialing",
+      media:isVid?"video":"audio", facing:"user", camOff:false,
       pc:null, local:stream, t0:0, timer:null, noAns:null, muted:false, speaker:false,
       ringT:null, iceQ:[], acceptedLocal:false, connT:null};
     callNativeBegin();                          /* v9.128：采集开始即进通信模式，硬件 AEC 全程参与 */
+    if(isVid){                                  /* v9.129：视频通话默认免提（看屏幕的自然姿态） */
+      callState.speaker=true;
+      try{ if(typeof App!=="undefined" && App && App.callSetSpeaker) App.callSetSpeaker(true); }catch(e){}
+    }
+    if(isVid) callLocalBind();                  /* v9.129：本地预览小窗 */
     callRender();
-    wsSend({type:"call_invite", to:pid, call_id:cid});
+    wsSend({type:"call_invite", to:pid, call_id:cid, media:isVid?"video":"audio"});
     callRing("back");                              /* 主叫回铃 */
     callState.noAns=setTimeout(function(){          /* 45s 无应答 → 未接听 */
       if(callState && callState.role==="caller" && callState.status==="dialing"){
@@ -6245,14 +6284,16 @@ function voiceCallStart(pid,nm,av){
         callCleanup("对方无应答，通话未接通");
       }
     }, CALL_NOANSWER_MS);
-  });
+  }, isVid?CALL_GUM_VIDEO:null);
 }
 /* 来电（被叫）：显示接听/拒绝界面 */
 function callIncoming(o){
   var f=o.from||{};
+  var isVid = (o.media==="video");
   if(callState){ wsSend({type:"call_reject", call_id:o.call_id}); return; }   /* 忙线自动拒绝 */
   callState={id:o.call_id, pid:f.id||"", nm:f.nickname||"好友", av:f.avatar||"", role:"callee",
-    status:"incoming", pc:null, local:null, t0:0, timer:null, noAns:null, muted:false,
+    status:"incoming", media:isVid?"video":"audio", facing:"user", camOff:false,
+    pc:null, local:null, t0:0, timer:null, noAns:null, muted:false,
     speaker:false, ringT:null, iceQ:[], acceptedLocal:false, connT:null};
   callRender();
   callRing("in");
@@ -6263,23 +6304,27 @@ function callIncoming(o){
     }
   }, CALL_NOANSWER_MS+15000);
 }
-/* 被叫点击「接听」：拿麦克风 → call_accept → 等主叫 offer */
+/* 被叫点击「接听」：拿麦克风(/摄像头) → call_accept → 等主叫 offer */
 function callAccept(){
   if(!callState || callState.status!=="incoming") return;
+  var isVid = callState.media==="video";
   callStatus("正在接听…");
-  navigator.mediaDevices.getUserMedia(CALL_GUM_OPT).then(function(stream){
+  var failFn=function(){ wsSend({type:"call_reject", call_id:callState.id}); callCleanup((isVid?"无法访问摄像头/麦克风":"无法访问麦克风")+"，通话未接通"); };
+  callGum(function(stream){
     if(!callState || callState.status!=="incoming"){ try{ stream.getTracks().forEach(function(t){t.stop();}); }catch(e){} return; }
     callState.local=stream;
     callState.acceptedLocal=true;
     callState.status="connecting";
     callNativeBegin();                          /* v9.128：采集开始即进通信模式，硬件 AEC 全程参与 */
+    if(isVid){                                  /* v9.129：视频通话默认免提 */
+      callState.speaker=true;
+      try{ if(typeof App!=="undefined" && App && App.callSetSpeaker) App.callSetSpeaker(true); }catch(e){}
+    }
+    if(isVid) callLocalBind();                  /* v9.129：本地预览小窗 */
     callRingStop();
     callRender();
     wsSend({type:"call_accept", call_id:callState.id});
-  }).catch(function(e){
-    wsSend({type:"call_reject", call_id:callState.id});
-    callCleanup("无法访问麦克风，通话未接通");
-  });
+  }, isVid?CALL_GUM_VIDEO:null, failFn);
 }
 /* 被叫点击「拒绝」 */
 function callReject(){
@@ -6392,18 +6437,20 @@ function callCreatePc(){
   var pc=new RTCPeerConnection(CALL_ICE);
   callState.pc=pc;
   try{ if(callState.local) callState.local.getTracks().forEach(function(tr){ pc.addTrack(tr, callState.local); }); }catch(e){}
-  /* 远端音频：绑定到常驻 <audio> 元素播放（听筒/扬声器路由由原生 AudioManager 控制）
+  /* 远端媒体：音频通话绑 <audio>；视频通话绑 <video>（音画同流，video 自带播放音轨）
      v9.127：play() 被自动播放策略拒绝时延迟重试（配合原生 setMediaPlaybackRequiresUserGesture(false) 双保险） */
   pc.ontrack=function(ev){
-    var au=document.getElementById("callRemote");
-    if(au && ev.streams && ev.streams[0]){
-      try{
-        au.srcObject=ev.streams[0];
-        callApplyVol();                        /* v9.128：按当前听筒/扬声器状态设定音量 */
-        var p=au.play();
-        if(p&&p.catch) p.catch(function(){ setTimeout(function(){ var q=au.play(); if(q&&q.catch) q.catch(function(){}); },400); });
-      }catch(e){}
-    }
+    if(!ev.streams || !ev.streams[0]) return;
+    var isVid = !!(callState && callState.media==="video");
+    var el=document.getElementById(isVid?"callRemoteVideo":"callRemote");
+    if(!el) return;
+    try{
+      el.srcObject=ev.streams[0];
+      el.style.display=isVid?"block":"none";    /* v9.129：视频模式显示全屏远端画面 */
+      callApplyVol();                        /* v9.128：按当前听筒/扬声器状态设定音量 */
+      var p=el.play();
+      if(p&&p.catch) p.catch(function(){ setTimeout(function(){ var q=el.play(); if(q&&q.catch) q.catch(function(){}); },400); });
+    }catch(e){}
   };
   pc.onicecandidate=function(ev){
     if(ev.candidate) wsSend({type:"call_ice", call_id:callState.id, candidate:ev.candidate});
@@ -6465,7 +6512,8 @@ function callFailNet(msg){
 /* ---------- UI ---------- */
 function callRender(){
   var el=document.getElementById("callPage"); if(!el) return;
-  var c=callState; if(!c){ el.classList.remove("on"); el.innerHTML=""; return; }
+  var c=callState; if(!c){ el.classList.remove("on","vid"); el.innerHTML=""; callVideoUi(false); return; }
+  var isVid=(c.media==="video");
   var av=c.av? '<div class="call-av">'+socAvHtml(c.av)+'</div>'
              : '<div class="call-av-ic">'+icon("user",46)+'</div>';
   var pulse=(c.status==="dialing"||c.status==="incoming")?' class="call-pulse"':"";
@@ -6478,11 +6526,20 @@ function callRender(){
   if(c.status==="incoming"){
     bot='<div class="call-btns" style="margin-top:34px">'+
       '<button class="call-fab red" data-act="callReject" title="拒绝">'+icon("phoneOff",26)+'</button>'+
-      '<button class="call-fab green" data-act="callAccept" title="接听">'+icon("call",26)+'</button>'+
+      '<button class="call-fab green" data-act="callAccept" title="接听">'+icon(isVid?"video":"call",26)+'</button>'+
       '</div>';
   } else if(c.status==="dialing"){
     bot='<div class="call-btns" style="margin-top:34px">'+
       '<button class="call-fab red" data-act="callCancel" title="取消">'+icon("phoneOff",26)+'</button>'+
+      '</div>';
+  } else if(isVid){
+    /* v9.129：视频通话——麦克风 / 摄像头开关 / 前后切换 / 扬声器 / 挂断 */
+    bot='<div class="call-btns" style="margin-top:34px">'+
+      '<button class="call-fab'+(c.muted?" on":"")+'" data-act="callMic" title="麦克风">'+icon(c.muted?"micOff":"mic",22)+'</button>'+
+      '<button class="call-fab'+(c.camOff?" on":"")+'" data-act="callCam" title="摄像头">'+icon(c.camOff?"videoOff":"video",22)+'</button>'+
+      '<button class="call-fab red" data-act="callHangup" title="挂断">'+icon("phoneOff",28)+'</button>'+
+      '<button class="call-fab" data-act="callSwitchCam" title="切换摄像头">'+icon("camFlip",22)+'</button>'+
+      '<button class="call-fab'+(c.speaker?" on":"")+'" data-act="callSpeaker" title="扬声器">'+icon("speaker",22)+'</button>'+
       '</div>';
   } else {
     bot='<div class="call-btns" style="margin-top:34px">'+
@@ -6491,14 +6548,66 @@ function callRender(){
       '<button class="call-fab'+(c.speaker?" on":"")+'" data-act="callSpeaker" title="扬声器">'+icon("speaker",26)+'</button>'+
       '</div>';
   }
-  el.innerHTML='<div class="call-top">'+icon("call",15)+'语音通话'+(c.status==="active"?"":" · "+esc(c.pid))+'</div>'+mid+
+  var ttl=isVid?"视频通话":"语音通话";
+  el.innerHTML='<div class="call-top">'+icon(isVid?"video":"call",15)+ttl+(c.status==="active"?"":" · "+esc(c.pid))+'</div>'+mid+
     '<div class="call-bot">'+bot+'</div>';
   el.classList.add("on");
+  if(isVid) el.classList.add("vid"); else el.classList.remove("vid");
+  callVideoUi(isVid);   /* 本地小窗显隐 */
+}
+/* v9.129：视频元素显隐/绑定统一入口 */
+function callVideoUi(on){
+  var lv=document.getElementById("callLocalVideo");
+  if(lv){ lv.style.display=(on && callState && callState.local)?"block":"none"; }
+}
+/* v9.129：本地预览小窗绑定（muted 防自听回音） */
+function callLocalBind(){
+  var lv=document.getElementById("callLocalVideo");
+  if(lv && callState && callState.local){
+    try{ lv.srcObject=callState.local; var p=lv.play(); if(p&&p.catch) p.catch(function(){}); }catch(e){}
+  }
+  callVideoUi(true);
+}
+/* v9.129：摄像头开关（视频轨 enabled 翻转，轨道保留不断流） */
+function callToggleCam(){
+  if(!callState || callState.media!=="video") return;
+  var tr=callState.local && callState.local.getVideoTracks()[0];
+  if(tr){ callState.camOff=!callState.camOff; tr.enabled=!callState.camOff; }
+  var lv=document.getElementById("callLocalVideo");
+  if(lv) lv.classList.toggle("camoff", !!callState.camOff);
+  callRender();
+}
+/* v9.129：前后摄像头切换（重取视频轨 → replaceTrack 热切换，音频不断） */
+function callSwitchCam(){
+  if(!callState || callState.media!=="video" || callState.camBusy) return;
+  callState.camBusy=true;
+  callState.facing=(callState.facing==="user")?"environment":"user";
+  var next=callState.facing;
+  navigator.mediaDevices.getUserMedia({video:{facingMode:next, width:{ideal:640}, height:{ideal:480}, frameRate:{ideal:20}}, audio:false}).then(function(ns){
+    var nt=ns.getVideoTracks()[0];
+    if(!nt || !callState || !callState.pc){ try{ nt.stop(); }catch(e){} try{ ns.stop&&ns.stop(); }catch(e){} callState&&(callState.camBusy=false); return; }
+    var old=callState.local && callState.local.getVideoTracks()[0];
+    var snd=callState.pc.getSenders().filter(function(s){ return s.track && s.track.kind==="video"; })[0];
+    var done=function(){
+      try{ if(old) old.stop(); }catch(e){}
+      try{ if(old && callState.local) callState.local.removeTrack(old); }catch(e){}
+      try{ callState.local.addTrack(nt); }catch(e){}
+      callLocalBind();                     /* 小窗换新流 */
+      callState.camBusy=false;
+      toast(next==="user"?"已切换到前置摄像头":"已切换到后置摄像头","info");
+    };
+    if(snd && snd.replaceTrack){ snd.replaceTrack(nt).then(done).catch(done); }
+    else { try{ callState.pc.removeTrack(callState.pc.getSenders().filter(function(s){return s.track&&s.track.kind==="video";})[0]); }catch(e){} try{ callState.pc.addTrack(nt, callState.local); }catch(e){} done(); }
+  }).catch(function(){
+    if(callState) callState.camBusy=false;
+    toast("无法切换摄像头","warn");
+  });
 }
 function callStatusText(){
   var c=callState; if(!c) return "";
+  var isVid=(c.media==="video");
   return c.status==="dialing"?"正在等待对方接听…":
-         c.status==="incoming"?"邀请你进行语音通话":
+         c.status==="incoming"?("邀请你进行"+(isVid?"视频":"语音")+"通话"):
          c.status==="connecting"?"正在建立连接…":"通话中";
 }
 function callStatus(txt){ var el=document.getElementById("callSt"); if(el&&txt) el.textContent=txt; }
@@ -6560,11 +6669,16 @@ function callCleanup(msg){
   /* 远端音频复位 */
   var au=document.getElementById("callRemote");
   if(au){ try{ au.pause(); au.srcObject=null; au.volume=1; }catch(e){} }
+  /* v9.129：远端/本地视频复位 */
+  var rv=document.getElementById("callRemoteVideo");
+  if(rv){ try{ rv.pause(); rv.srcObject=null; rv.style.display="none"; }catch(e){} }
+  var lv=document.getElementById("callLocalVideo");
+  if(lv){ try{ lv.pause(); lv.srcObject=null; lv.style.display="none"; lv.classList.remove("camoff"); }catch(e){} }
   callNativeEnd();
   callRingStop();
   callState=null;
   var el=document.getElementById("callPage");
-  if(el){ el.classList.remove("on"); el.innerHTML=""; }
+  if(el){ el.classList.remove("on","vid"); el.innerHTML=""; }
   if(msg) toast(msg,"info");
 }
 /* v9.90：右上角三条杠 → 轻量弹出更多操作（删除好友 / 拉黑 / 取消拉黑） */
@@ -10769,13 +10883,15 @@ function handleAct(act,el){
     case "profileMore": profileMore(); break;
     /* v9.125：语音通话（发起/来电/接听/拒绝/取消/挂断/麦克风/扬声器） */
     case "profileCall": profileCall(); break;
-    case "callVoice": { var cv=profileState; if(cv) voiceCallStart(cv.id, cv.nickname, cv.avatar); break; }
-    case "callVideo": toast("视频通话开发中，敬请期待","info"); break;
+    case "callVoice": { var cv=profileState; if(cv) voiceCallStart(cv.id, cv.nickname, cv.avatar, "audio"); break; }
+    case "callVideo": { var cv2=profileState; if(cv2) voiceCallStart(cv2.id, cv2.nickname, cv2.avatar, "video"); break; }
     case "callAccept": callAccept(); break;
     case "callReject": callReject(); break;
     case "callCancel": callCancel(); break;
     case "callHangup": callHangup(); break;
     case "callMic": callToggleMic(); break;
+    case "callCam": callToggleCam(); break;
+    case "callSwitchCam": callSwitchCam(); break;
     case "callSpeaker": callToggleSpeaker(); break;
     case "msgRevoke": { var mrv=el.getAttribute("data-id"); if(mrv) msgRevokeDo(parseInt(mrv,10)); break; }
     case "msgRevokeGo": { var mrvg=el.getAttribute("data-id"); if(mrvg) msgRevokeGo(parseInt(mrvg,10)); break; }

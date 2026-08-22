@@ -48,8 +48,11 @@ def _insert_call_record(call: dict, event: str, duration: int = 0):
     随后 WS 实时推送双方（与 message.py 的 new_message 事件同构，前端复用现有渲染入口）。"""
     try:
         conv_id = su.get_or_create_conversation(call["caller"], call["callee"])
-        content = json.dumps({"event": event, "duration": max(0, int(duration))},
-                             ensure_ascii=False)
+        # v9.129：media=video 时记录带视频标识（前端/通知栏据此显示"视频通话"）
+        payload = {"event": event, "duration": max(0, int(duration))}
+        if call.get("media") == "video":
+            payload["media"] = "video"
+        content = json.dumps(payload, ensure_ascii=False)
         cur = db.execute(
             "INSERT INTO messages (conversation_id, sender_id, type, content, notified, read_at) "
             "VALUES (?,?,'call',?,1,datetime('now','localtime'))",
@@ -102,22 +105,23 @@ def _duration_of(c: dict) -> int:
 
 # ---------------- 通话记录文案（会话列表摘要复用） ----------------
 def record_text(content_json: str) -> str:
-    """通话记录 content(JSON) → 可读文案：通话 03:24 / 未接听 / 已取消 / 已拒绝。"""
+    """通话记录 content(JSON) → 可读文案：通话 03:24 / 未接听 / 已取消 / 已拒绝（视频通话带前缀）。"""
     try:
         o = json.loads(content_json or "{}")
     except Exception:
         o = {}
     ev = o.get("event", "")
     dur = int(o.get("duration") or 0)
+    pre = "视频通话" if o.get("media") == "video" else "通话"
     if ev == "end":
-        return "通话 %02d:%02d" % (dur // 60, dur % 60)
+        return "%s %02d:%02d" % (pre, dur // 60, dur % 60)
     if ev == "missed":
-        return "未接听"
+        return "视频通话未接听" if o.get("media") == "video" else "未接听"
     if ev == "rejected":
         return "已拒绝"
     if ev == "canceled":
         return "已取消"
-    return "通话"
+    return pre
 
 
 # ---------------- 信令入口（ws_hub 收到 call_* 上行时调用） ----------------
@@ -161,12 +165,14 @@ async def _on_invite(hub, user, obj):
         await hub.push_to_user_async(me, {"type": "call_fail", "call_id": call_id, "reason": fail})
         return
     calls[call_id] = {"caller": me, "callee": peer["id"], "status": "ringing",
-                      "created": time.time(), "answered": None}
+                      "created": time.time(), "answered": None,
+                      "media": "video" if str(obj.get("media") or "") == "video" else "audio"}
     user_calls[me] = call_id
     user_calls[peer["id"]] = call_id
     # 来电推给对方（多设备全推；谁先接听以服务端状态机为准）
     await hub.push_to_user_async(peer["id"], {
-        "type": "call_invite", "call_id": call_id, "from": _public(user)})
+        "type": "call_invite", "call_id": call_id,
+        "media": calls[call_id]["media"], "from": _public(user)})
     # 回铃确认给发起方（前端据此显示"等待接听"）
     await hub.push_to_user_async(me, {"type": "call_ringing", "call_id": call_id})
 

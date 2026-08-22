@@ -242,6 +242,23 @@ async def main():
     check("rejected", call.record_text('{"event":"rejected"}') == "已拒绝")
     check("canceled", call.record_text('{"event":"canceled"}') == "已取消")
     check("坏 JSON 容错", call.record_text("not-json") == "通话")
+    # v9.129：视频通话文案
+    check("video end", call.record_text('{"event":"end","duration":185,"media":"video"}') == "视频通话 03:05")
+    check("video missed", call.record_text('{"event":"missed","media":"video"}') == "视频通话未接听")
+
+    print("\n== v9.129 场景12：视频通话 media 透传与落库 ==")
+    await call.handle_call_signal(hub, A, {"type": "call_invite", "to": B["public_id"],
+                                           "call_id": "cid12", "media": "video"})
+    invs = hub.pops(B["id"], "call_invite")
+    check("视频来电携带 media=video", len(invs) == 1 and invs[0].get("media") == "video", str(invs))
+    hub.clear()
+    await call.handle_call_signal(hub, B, {"type": "call_accept", "call_id": "cid12"})
+    await call.handle_call_signal(hub, A, {"type": "call_end", "call_id": "cid12", "duration": 12})
+    msg = last_call_msg((A["id"], B["id"]))
+    o = json.loads(msg["content"]) if msg else {}
+    check("视频通话落库带 media=video",
+          o.get("event") == "end" and o.get("duration") == 12 and o.get("media") == "video", str(o))
+    hub.clear()
 
     print(f"\n========== 结果：{PASS} 通过 / {FAIL} 失败 ==========")
     return 1 if FAIL else 0

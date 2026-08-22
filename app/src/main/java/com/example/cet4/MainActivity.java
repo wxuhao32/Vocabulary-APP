@@ -159,33 +159,39 @@ public class MainActivity extends ComponentActivity {
             @Override
             public void onPermissionRequest(final android.webkit.PermissionRequest request) {
                 try {
-                    boolean mic = false;
+                    boolean mic = false, cam = false;
                     for (String r : request.getResources()) {
-                        if (android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) {
-                            mic = true;
-                            break;
-                        }
+                        if (android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) mic = true;
+                        if (android.webkit.PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r)) cam = true;
                     }
-                    if (!mic) {
+                    if (!mic && !cam) {
                         request.deny();
                         return;
                     }
-                    boolean granted = checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
-                            == PackageManager.PERMISSION_GRANTED;
-                    Log.d(TAG, "onPermissionRequest audio granted=" + granted
-                            + " res=" + java.util.Arrays.toString(request.getResources()));
-                    if (granted) {
+                    /* v9.129：通话媒体（音频/视频）运行时权限——缺哪个补哪个，全通过才 grant */
+                    java.util.List<String> need = new java.util.ArrayList<>();
+                    if (mic && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                            != PackageManager.PERMISSION_GRANTED) {
+                        need.add(android.Manifest.permission.RECORD_AUDIO);
+                    }
+                    if (cam && checkSelfPermission(android.Manifest.permission.CAMERA)
+                            != PackageManager.PERMISSION_GRANTED) {
+                        need.add(android.Manifest.permission.CAMERA);
+                    }
+                    Log.d(TAG, "onPermissionRequest mic=" + mic + " cam=" + cam
+                            + " need=" + need + " res=" + java.util.Arrays.toString(request.getResources()));
+                    if (need.isEmpty()) {
                         runOnUiThread(() -> {
                             try { request.grant(request.getResources()); }
                             catch (Throwable t) {
-                                Log.e(TAG, "grant audio fail", t);
+                                Log.e(TAG, "grant media fail", t);
                                 try { request.deny(); } catch (Throwable ignored) {}
                             }
                         });
                     } else {
                         pendingPermissionRequest = request;
                         runOnUiThread(() -> requestPermissions(
-                                new String[]{android.Manifest.permission.RECORD_AUDIO}, REQ_RECORD_AUDIO));
+                                need.toArray(new String[0]), REQ_RECORD_AUDIO));
                     }
                 } catch (Throwable t) {
                     Log.e(TAG, "onPermissionRequest fail", t);
@@ -295,15 +301,18 @@ public class MainActivity extends ComponentActivity {
             final boolean granted = res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED;
             runJs("window.__onNotifPerm(" + (granted ? "true" : "false") + ");");
         } else if (requestCode == REQ_RECORD_AUDIO) {
-            final boolean granted = res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED;
-            Log.d(TAG, "REQ_RECORD_AUDIO result granted=" + granted);
+            /* v9.129：通话媒体权限（音频/摄像头，可能一次申请多个）——全部通过才 grant */
+            boolean allGranted = res.length > 0;
+            for (int r : res) { if (r != PackageManager.PERMISSION_GRANTED) { allGranted = false; break; } }
+            Log.d(TAG, "REQ_RECORD_AUDIO result allGranted=" + allGranted
+                    + " perms=" + java.util.Arrays.toString(perms));
             final android.webkit.PermissionRequest pr = pendingPermissionRequest;
             pendingPermissionRequest = null;
             if (pr != null) {
-                if (granted) {
+                if (allGranted) {
                     try { pr.grant(pr.getResources()); }
                     catch (Throwable t) {
-                        Log.e(TAG, "grant record audio fail", t);
+                        Log.e(TAG, "grant call media fail", t);
                         try { pr.deny(); } catch (Throwable ignored) {}
                     }
                 } else {

@@ -297,18 +297,21 @@ public class NotifyService extends Service {
         }
     }
 
-    /* v9.125：通话记录 content(JSON {event,duration}) → 可读文案（与服务端 call.record_text 一致） */
+    /* v9.125：通话记录 content(JSON {event,duration,media}) → 可读文案（与服务端 call.record_text 一致）
+       v9.129：media=video → 视频通话前缀 */
     private static String callRecordText(String contentJson) {
         try {
             JSONObject o = new JSONObject(contentJson == null ? "{}" : contentJson);
             String ev = o.optString("event", "");
             int dur = Math.max(0, o.optInt("duration", 0));
+            boolean vid = "video".equals(o.optString("media", ""));
+            String pre = vid ? "视频通话" : "通话";
             switch (ev) {
-                case "end":     return String.format("通话 %02d:%02d", dur / 60, dur % 60);
-                case "missed":  return "未接听";
+                case "end":     return String.format("%s %02d:%02d", pre, dur / 60, dur % 60);
+                case "missed":  return vid ? "视频通话未接听" : "未接听";
                 case "rejected":return "已拒绝";
                 case "canceled":return "已取消";
-                default:        return "通话";
+                default:        return pre;
             }
         } catch (Throwable t) { return "通话"; }
     }
