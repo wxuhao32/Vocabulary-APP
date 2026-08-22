@@ -898,6 +898,12 @@ hr.sep{border:none;border-top:1px dashed var(--line);margin:14px 0}
 .call-page.vid .call-fab.red{width:60px;height:60px}
 /* 视频模式且摄像头关闭：本地小窗提示 */
 #callLocalVideo.camoff{background:#1A2230}
+/* v9.131：大小屏切换（点小窗换位）——默认远端全屏/本地小窗，body 加 vid-swap 后互换。
+   只切 CSS 类不动 srcObject，视频流零中断零闪烁 */
+body.vid-swap #callRemoteVideo{position:fixed;inset:auto;z-index:223;width:104px;height:148px;object-fit:cover;border-radius:14px;background:#10151D;border:2px solid rgba(255,255,255,.35);box-shadow:0 10px 28px rgba(0,0,0,.5);top:calc(64px + env(safe-area-inset-top));right:14px}
+body.vid-swap #callLocalVideo{position:fixed;inset:0;z-index:219;width:100%;height:100%;object-fit:cover;background:#0A0E14;border:none;box-shadow:none;border-radius:0}
+/* 小窗可点击提示（切换大小屏） */
+#callLocalVideo,body.vid-swap #callRemoteVideo{cursor:pointer}
 /* 登录 / 账户二级页（全屏覆盖层） */
 .login-page{position:fixed;inset:0;z-index:120;background:var(--bg);display:none;flex-direction:column;overflow-y:auto}
 .login-page.on{display:flex}
@@ -1547,6 +1553,7 @@ var ICONS={
  videoOff:'<rect x="2.8" y="6.4" width="12.4" height="11.2" rx="2.6"/><path d="M15.2 10.6l5.2-3v8.8l-5.2-3"/><path d="M3.2 3.2l17.6 17.6"/>',
  camFlip:'<path d="M20.4 12a8.4 8.4 0 0 1-14.4 5.9M3.6 12a8.4 8.4 0 0 1 14.4-5.9"/><path d="M18.6 2.8v3.6h-3.6M5.4 21.2v-3.6H9"/>',
  phoneOff:'<path d="M21.2 16.6v2.7a2 2 0 0 1-2.2 2 19.2 19.2 0 0 1-8.4-3 19 19 0 0 1-5.8-5.8 19.2 19.2 0 0 1-3-8.4 2 2 0 0 1 2-2.2h2.7a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.4 2.1l-1.1 1.1a15.4 15.4 0 0 0 5.8 5.8l1.1-1.1a2 2 0 0 1 2.1-.4c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/><path d="M3.2 3.2l17.6 17.6"/>',
+ phoneEnd:'<path transform="rotate(135 12 12)" d="M21.2 16.6v2.7a2 2 0 0 1-2.2 2 19.2 19.2 0 0 1-8.4-3 19 19 0 0 1-5.8-5.8 19.2 19.2 0 0 1-3-8.4 2 2 0 0 1 2-2.2h2.7a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.4 2.1l-1.1 1.1a15.4 15.4 0 0 0 5.8 5.8l1.1-1.1a2 2 0 0 1 2.1-.4c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/>',
  micOff:'<rect x="9" y="3.4" width="6" height="10.6" rx="3"/><path d="M5.4 11.4a6.6 6.6 0 0 0 13.2 0"/><path d="M12 18v2.8"/><path d="M4 4l16 16"/>',
  speaker:'<path d="M4 9.4v5.2h3.6L12 18.6V5.4L7.6 9.4z"/><path d="M15.4 9.2a4.1 4.1 0 0 1 0 5.6"/><path d="M18.1 6.4a8 8 0 0 1 0 11.2"/>'
 };
@@ -4602,6 +4609,9 @@ function wsOnNewMessage(o){
     box.scrollTop=box.scrollHeight;
     dbgLog("WS-UI","mid="+m.id+" 渲染完成 t="+Date.now());  /* v9.114 诊断 */
     if(m.id>socState.chatAfter) socState.chatAfter=m.id;
+    /* v9.131：会话缓存追加（下次进入先显示最新） */
+    var _cc=chatMsgCache[fr.id];
+    if(_cc){ _cc.msgs.push(m); _cc.after=Math.max(_cc.after||0, m.id); }
     /* 正在看聊天页 → 即时标记已读（复用服务端已读逻辑；轮询停用后已读回执仍实时） */
     apiJson("/api/v1/conversations/"+socState.friend.id+"/messages?limit=1",{noRefresh:true}).then(function(){});
     try{ pollSocial(); }catch(e){}
@@ -4764,9 +4774,16 @@ function openFriendsPage(){
       '<div id="socFriendList"></div>'+
     '</div>';
   el.classList.add("on");
-  /* v9.120：先渲染本地缓存（若有）→ 立即显示，后台刷新；返回再进不重复长时间加载 */
+  /* v9.120：先渲染本地缓存（若有）→ 立即显示，后台刷新；返回再进不重复长时间加载
+     v9.131：无内存缓存时回退 localStorage 持久化缓存（App 重启后首次打开也秒开；
+     瘦身存储不含头像 dataURL，先显示昵称/摘要，后台刷新补头像） */
   if(socFriendCache && socFriendCache.friends){
     renderFriendList(socFriendCache.friends);
+  } else {
+    try{
+      var j=JSON.parse(localStorage.getItem("cet4deck.friends")||"null");
+      if(j && j.length) renderFriendList(j);
+    }catch(e){}
   }
   refreshFriends();
 }
@@ -4793,6 +4810,14 @@ function refreshFriends(){
     var fs=r.data.friends||[];
     /* v9.120：成功即写缓存（含未读数），下次进入先渲染缓存 */
     socFriendCache={friends:fs, ts:Date.now()};
+    /* v9.131：持久化瘦身缓存（剔除头像 dataURL 防 localStorage 配额溢出；昵称/摘要/未读数够首屏） */
+    try{
+      localStorage.setItem("cet4deck.friends", JSON.stringify(fs.map(function(f){
+        return {id:f.id, nickname:f.nickname, avatar:"",
+          last_message:f.last_message, last_message_type:f.last_message_type,
+          unread_count:f.unread_count, last_message_at:f.last_message_at};
+      })));
+    }catch(e){}
     renderFriendList(fs);
   });
 }
@@ -4866,9 +4891,22 @@ function reqReject(id){
   });
 }
 /* ---------- 聊天页 ---------- */
+/* v9.131：会话消息缓存（内存，按 pid）——进入聊天页先渲染缓存立即显示，后台拉最新再增量刷新 */
+var chatMsgCache={};
+function chatCacheSave(pid, msgs, after, revokedAfter){
+  try{
+    chatMsgCache[pid]={msgs:msgs, after:after, revokedAfter:revokedAfter,
+      friend:{nickname:socState.friend.nickname, avatar:socState.friend.avatar}};
+    /* 上限 30 个会话 × 50 条，防内存膨胀 */
+    var ks=Object.keys(chatMsgCache);
+    if(ks.length>30) delete chatMsgCache[ks[0]];
+  }catch(e){}
+}
 function openChatPage(pid, nm, avatar){
   socState.friend={id:pid,nickname:nm||"聊天",avatar:avatar||""};
   chatState.select=false; chatState.sel={};
+  /* v9.131：分页/缓存状态复位 */
+  socState.chatNoMore=false; socState.chatTopLoading=false;
   /* v9.112：告知原生通知服务当前正在查看的好友（该好友新消息不再弹系统通知，避免双份） */
   setFgChat(pid);
   var el=document.getElementById("chatPage");
@@ -4894,7 +4932,29 @@ function openChatPage(pid, nm, avatar){
     /* v9.122：录音初始化开发日志面板（localStorage cet4deck.voice_debug=1 开启，仅开发用） */
     '<pre id="voiceDbg" style="display:none;position:fixed;left:8px;bottom:76px;z-index:99;max-width:90%;max-height:180px;overflow:auto;background:rgba(0,0,0,.82);color:#7CFC9A;font-size:10px;line-height:1.5;padding:8px 10px;border-radius:8px;white-space:pre-wrap;margin:0;pointer-events:none"></pre>';
   el.classList.add("on");
-  loadChatHistory();
+  /* v9.131：滚动到顶部自动加载更早历史（绑一次；chatBox 每次 innerHTML 重建但元素本体复用） */
+  var scb=document.getElementById("chatBox");
+  if(scb && !scb.__topBound){
+    scb.__topBound=1;
+    scb.addEventListener("scroll", function(){
+      if(this.scrollTop<=60) loadChatEarlier();
+    });
+  }
+  /* v9.131：背景立即应用（localStorage 本地读取，原先等历史 API 返回才应用） */
+  applyChatBg();
+  /* v9.131：有缓存先渲染（返回再进/切会话立即显示，不等网络） */
+  var cc=chatMsgCache[pid];
+  if(cc && cc.msgs && cc.msgs.length){
+    if(cc.friend && cc.friend.nickname) socState.friend.nickname=cc.friend.nickname;
+    if(cc.friend && cc.friend.avatar!==undefined) socState.friend.avatar=cc.friend.avatar;
+    var rt=document.getElementById("chatTop"); if(rt) rt.innerHTML=chatTopHtml();
+    var cbox=document.getElementById("chatBox");
+    cbox.innerHTML=cc.msgs.map(chatMsgHtml).join("");
+    loadChatImages(cbox); bindChatLongPress();
+    cbox.scrollTop=cbox.scrollHeight;
+    socState.chatAfter=cc.after||0; socState.revokedAfter=cc.revokedAfter||0;
+  }
+  loadChatHistory();   /* 后台拉最新（服务端为准；与缓存相同时跳过重渲染防闪烁） */
   /* v9.113：进入聊天页立即应用软键盘适配（键盘弹出时 visualViewport 自动联动） */
   applyImeFit();
 }
@@ -5342,25 +5402,59 @@ function loadChatHistory(){
       var t=document.getElementById("chatTitle");
       if(t) t.textContent=socState.friend.nickname;
     }
+    var msgs=r.data.messages||[];
     var box=document.getElementById("chatBox"); if(!box) return;
-    box.innerHTML=(r.data.messages||[]).map(chatMsgHtml).join("");
-    loadChatImages(box);
-    /* v9.91：长按撤回绑定 */
-    bindChatLongPress();
+    var maxRev=0;
+    msgs.forEach(function(m){ if(m.revoked && m.id>maxRev) maxRev=m.id; });
+    socState.revokedAfter = maxRev;
+    socState.chatAfter = msgs.length? msgs[msgs.length-1].id : 0;
+    /* v9.131：写会话缓存（下次进入先显示） */
+    chatCacheSave(socState.friend.id, msgs, socState.chatAfter, socState.revokedAfter);
+    /* v9.131：缓存已渲染且数据未变（首尾 id 与条数一致）→ 跳过全量重渲染（防滚动跳变/闪烁），
+       仅续轮询；否则全量渲染（数据更新后局部刷新） */
+    var cc=chatMsgCache[socState.friend.id];
+    var same=cc && cc._rendered && cc.msgs.length===msgs.length &&
+      msgs.length && cc.msgs[0].id===msgs[0].id && cc.msgs[cc.msgs.length-1].id===msgs[msgs.length-1].id;
+    if(!same){
+      box.innerHTML=msgs.map(chatMsgHtml).join("");
+      loadChatImages(box);
+      /* v9.91：长按撤回绑定 */
+      bindChatLongPress();
+      box.scrollTop=box.scrollHeight;
+      /* v9.96：选择模式下保持勾选态渲染 */
+      if(chatState.select) renderChatSel();
+    }
+    chatMsgCache[socState.friend.id]._rendered=true;
     /* v9.91：已撤回消息若曾产生系统通知，尽量同步取消 */
     if(typeof App!=="undefined" && App && App.cancelNotification){
-      (r.data.messages||[]).forEach(function(m){ if(m.revoked) App.cancelNotification(m.id); });
+      msgs.forEach(function(m){ if(m.revoked) App.cancelNotification(m.id); });
     }
-    var maxRev=0;
-    (r.data.messages||[]).forEach(function(m){ if(m.revoked && m.id>maxRev) maxRev=m.id; });
-    socState.revokedAfter = maxRev;
-    box.scrollTop=box.scrollHeight;
-    socState.chatAfter = r.data.messages.length? r.data.messages[r.data.messages.length-1].id : 0;
     startChatPoll();
-    /* v9.96：应用聊天背景（加载失败自动回退默认） */
-    applyChatBg();
-    /* v9.96：选择模式下保持勾选态渲染 */
-    if(chatState.select) renderChatSel();
+  });
+}
+/* v9.131：滚动到顶部加载更早历史（服务端 before 游标分页，每批 50 条；插入头部保持滚动位置） */
+function loadChatEarlier(){
+  if(socState.chatTopLoading || socState.chatNoMore) return;
+  var box=document.getElementById("chatBox"); if(!box) return;
+  var first=box.querySelector(".msg-row[data-mid]");
+  if(!first){ socState.chatNoMore=true; return; }
+  var beforeId=parseInt(first.getAttribute("data-mid"),10)||0;
+  if(!beforeId){ socState.chatNoMore=true; return; }
+  socState.chatTopLoading=true;
+  apiJson("/api/v1/conversations/"+socState.friend.id+"/messages?before="+beforeId+"&limit=50").then(function(r){
+    socState.chatTopLoading=false;
+    if(r.status!==200) return;
+    var older=r.data.messages||[];
+    if(!older.length){ socState.chatNoMore=true; return; }
+    if(older.length<50) socState.chatNoMore=true;
+    /* 保持滚动位置：记录插入前高度，插入后补偿差值（视觉无跳动） */
+    var oldH=box.scrollHeight, oldTop=box.scrollTop;
+    box.insertAdjacentHTML("afterbegin", older.map(chatMsgHtml).join(""));
+    loadChatImages(box);
+    box.scrollTop=oldTop+(box.scrollHeight-oldH);
+    /* 缓存头部合并 */
+    var cc=chatMsgCache[socState.friend.id];
+    if(cc) cc.msgs=older.concat(cc.msgs);
   });
 }
 function startChatPoll(){
@@ -5402,6 +5496,9 @@ function handleChatDelta(r){
     loadChatImages(box);
     box.scrollTop=box.scrollHeight;
     socState.chatAfter=r.data.messages[r.data.messages.length-1].id;
+    /* v9.131：会话缓存追加（轮询兜底通道收到的消息同样入缓存） */
+    var _cc=chatMsgCache[socState.friend.id];
+    if(_cc){ r.data.messages.forEach(function(m){ _cc.msgs.push(m); }); _cc.after=socState.chatAfter; }
   }
 }
 /* v9.98：长按任意消息 → 进入多选模式并选中该条（微信式交互；撤回移至多选操作栏） */
@@ -5501,10 +5598,14 @@ function sendMsg(){
     var tmpRow=box.querySelector('.msg-row[data-mid="'+tmpId+'"]');
     if(r.status===200){
       var realId=r.data.id;
-      var finalHtml=chatMsgHtml({id:realId,sender:"me",type:"text",content:v,file_id:null,revoked:false,created_at:localNowStr(),read:false});
+      var finalMsg={id:realId,sender:"me",type:"text",content:v,file_id:null,revoked:false,created_at:localNowStr(),read:false};
+      var finalHtml=chatMsgHtml(finalMsg);
       if(tmpRow){ tmpRow.outerHTML=finalHtml; }
       else if(!box.querySelector('.msg-row[data-mid="'+realId+'"]')){ box.insertAdjacentHTML("beforeend", finalHtml); box.scrollTop=box.scrollHeight; }
       if(realId>socState.chatAfter) socState.chatAfter=realId;
+      /* v9.131：自己发送的消息入会话缓存（WS 不回显发送者，需手动维护） */
+      var _cc=chatMsgCache[socState.friend.id];
+      if(_cc){ _cc.msgs.push(finalMsg); _cc.after=Math.max(_cc.after||0, realId); }
     } else {
       if(tmpRow) tmpRow.remove();
       toast(r.data.detail||"发送失败","warn");
@@ -6124,16 +6225,29 @@ function genderText(g){ return g==="male"?"男":(g==="female"?"女":"保密"); }
 
 /* ---------- 个人主页 ---------- */
 var profileState=null;   /* v9.90：当前主页用户数据（更多菜单用） */
+var profileCache={};     /* v9.131：pid → user（先显示缓存 → 后台刷新 → 变化才重渲染） */
 function openProfilePage(pid, nm){
   var el=document.getElementById("profilePage");
   el.setAttribute("data-pid", pid);
   profileState=null;
-  el.innerHTML=pageTop(esc(nm||"个人主页"),"closeProfilePage")+
-    '<div class="login-body"><div class="note">'+icon("clock",14)+'<span>加载中…</span></div></div>';
   el.classList.add("on");
+  /* v9.131：有缓存先渲染（立即显示，无"加载中"等待） */
+  var pc=profileCache[pid];
+  if(pc && pc.user){ renderProfile(pc.user); }
+  else{
+    el.innerHTML=pageTop(esc(nm||"个人主页"),"closeProfilePage")+
+      '<div class="login-body"><div class="note">'+icon("clock",14)+'<span>加载中…</span></div></div>';
+  }
   apiJson("/api/v1/users/"+encodeURIComponent(pid)+"/profile").then(function(r){
-    if(r.status!==200){ toast(r.data.detail||"加载失败","warn"); return; }
-    renderProfile(r.data.user);
+    if(r.status!==200){ if(!pc) toast(r.data.detail||"加载失败","warn"); return; }
+    var u=r.data.user;
+    /* v9.131：数据与缓存一致 → 跳过重渲染（防闪烁）；变化 → 局部刷新 */
+    var changed=true;
+    if(pc && pc.user){
+      try{ changed=JSON.stringify(pc.user)!==JSON.stringify(u); }catch(e){}
+    }
+    profileCache[pid]={user:u, ts:Date.now()};
+    if(changed || !pc) renderProfile(u);
   });
 }
 function closeProfilePage(){ var el=document.getElementById("profilePage"); el.classList.remove("on"); el.innerHTML=""; profileState=null; }
@@ -6274,7 +6388,7 @@ function voiceCallStart(pid,nm,av,media){
     if(callState){ try{ stream.getTracks().forEach(function(t){t.stop();}); }catch(e){} return; }
     var cid=uid();
     callState={id:cid, pid:pid, nm:nm||"对方", av:av||"", role:"caller", status:"dialing",
-      media:isVid?"video":"audio", facing:"user", camOff:false,
+      media:isVid?"video":"audio", facing:"user", camOff:false, vidSwap:false,
       pc:null, local:stream, t0:0, timer:null, noAns:null, muted:false, speaker:false,
       ringT:null, iceQ:[], acceptedLocal:false, connT:null};
     callNativeBegin();                          /* v9.128：采集开始即进通信模式，硬件 AEC 全程参与 */
@@ -6300,7 +6414,7 @@ function callIncoming(o){
   var isVid = (o.media==="video");
   if(callState){ wsSend({type:"call_reject", call_id:o.call_id}); return; }   /* 忙线自动拒绝 */
   callState={id:o.call_id, pid:f.id||"", nm:f.nickname||"好友", av:f.avatar||"", role:"callee",
-    status:"incoming", media:isVid?"video":"audio", facing:"user", camOff:false,
+    status:"incoming", media:isVid?"video":"audio", facing:"user", camOff:false, vidSwap:false,
     pc:null, local:null, t0:0, timer:null, noAns:null, muted:false,
     speaker:false, ringT:null, iceQ:[], acceptedLocal:false, connT:null};
   callRender();
@@ -6533,26 +6647,26 @@ function callRender(){
   var bot='';
   if(c.status==="incoming"){
     bot='<div class="call-btns" style="margin-top:34px">'+
-      '<button class="call-fab red" data-act="callReject" title="拒绝">'+icon("phoneOff",26)+'</button>'+
+      '<button class="call-fab red" data-act="callReject" title="拒绝">'+icon("phoneEnd",26)+'</button>'+
       '<button class="call-fab green" data-act="callAccept" title="接听">'+icon(isVid?"video":"call",26)+'</button>'+
       '</div>';
   } else if(c.status==="dialing"){
     bot='<div class="call-btns" style="margin-top:34px">'+
-      '<button class="call-fab red" data-act="callCancel" title="取消">'+icon("phoneOff",26)+'</button>'+
+      '<button class="call-fab red" data-act="callCancel" title="取消">'+icon("phoneEnd",26)+'</button>'+
       '</div>';
   } else if(isVid){
     /* v9.129：视频通话——麦克风 / 摄像头开关 / 前后切换 / 扬声器 / 挂断 */
     bot='<div class="call-btns" style="margin-top:34px">'+
       '<button class="call-fab'+(c.muted?" on":"")+'" data-act="callMic" title="麦克风">'+icon(c.muted?"micOff":"mic",22)+'</button>'+
       '<button class="call-fab'+(c.camOff?" on":"")+'" data-act="callCam" title="摄像头">'+icon(c.camOff?"videoOff":"video",22)+'</button>'+
-      '<button class="call-fab red" data-act="callHangup" title="挂断">'+icon("phoneOff",28)+'</button>'+
+      '<button class="call-fab red" data-act="callHangup" title="挂断">'+icon("phoneEnd",28)+'</button>'+
       '<button class="call-fab" data-act="callSwitchCam" title="切换摄像头">'+icon("camFlip",22)+'</button>'+
       '<button class="call-fab'+(c.speaker?" on":"")+'" data-act="callSpeaker" title="扬声器">'+icon("speaker",22)+'</button>'+
       '</div>';
   } else {
     bot='<div class="call-btns" style="margin-top:34px">'+
       '<button class="call-fab'+(c.muted?" on":"")+'" data-act="callMic" title="麦克风">'+icon(c.muted?"micOff":"mic",26)+'</button>'+
-      '<button class="call-fab red" data-act="callHangup" title="挂断">'+icon("phoneOff",30)+'</button>'+
+      '<button class="call-fab red" data-act="callHangup" title="挂断">'+icon("phoneEnd",30)+'</button>'+
       '<button class="call-fab'+(c.speaker?" on":"")+'" data-act="callSpeaker" title="扬声器">'+icon("speaker",26)+'</button>'+
       '</div>';
   }
@@ -6567,6 +6681,22 @@ function callRender(){
 function callVideoUi(on){
   var lv=document.getElementById("callLocalVideo");
   if(lv){ lv.style.display=(on && callState && callState.local)?"block":"none"; }
+  /* v9.131：小窗点击换位绑定（一次性；默认点本地小窗→自己变大屏，swap 后点远端小窗→还原） */
+  var rv=document.getElementById("callRemoteVideo");
+  if(lv && !lv.__swapBound){
+    lv.__swapBound=1;
+    lv.addEventListener("click", function(){ if(callState && callState.media==="video" && !callState.vidSwap) callVidSwap(); });
+  }
+  if(rv && !rv.__swapBound){
+    rv.__swapBound=1;
+    rv.addEventListener("click", function(){ if(callState && callState.media==="video" && callState.vidSwap) callVidSwap(); });
+  }
+}
+/* v9.131：大小屏切换——只切 body.vid-swap 类（CSS 定位互换），srcObject 不动 → 视频不中断不闪烁 */
+function callVidSwap(){
+  if(!callState || callState.media!=="video") return;
+  callState.vidSwap=!callState.vidSwap;
+  document.body.classList.toggle("vid-swap", !!callState.vidSwap);
 }
 /* v9.129：本地预览小窗绑定（muted 防自听回音） */
 function callLocalBind(){
@@ -6685,6 +6815,7 @@ function callCleanup(msg){
   callNativeEnd();
   callRingStop();
   callState=null;
+  document.body.classList.remove("vid-swap");   /* v9.131：大小屏切换态复位 */
   var el=document.getElementById("callPage");
   if(el){ el.classList.remove("on","vid"); el.innerHTML=""; }
   if(msg) toast(msg,"info");
