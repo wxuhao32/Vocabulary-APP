@@ -1,9 +1,9 @@
 # Vocabulary APP（我爱背单词）
 
-> 集**背单词 · AI 查词 · 本地大模型问答 · 完整账号体系 · 好友社交**于一体的 Android 学习 App。
+> 集**背单词 · AI 查词 · 本地大模型问答 · 完整账号体系 · 好友社交 · 音视频通话**于一体的 Android 学习 App。
 > 单 Activity + 单 WebView + 单文件前端；后端为 Python FastAPI + SQLite，配套 Cloudflare Tunnel 一键公网。
 
-当前版本：**v9.123**（详见 [CHANGELOG.md](./CHANGELOG.md)）
+当前版本：**v9.131**（详见 [CHANGELOG.md](./CHANGELOG.md)）
 
 ---
 
@@ -33,17 +33,37 @@
 
 ### 👥 社交
 - **好友**：按公开数字 ID 搜索、好友申请状态机、黑名单
-- **私聊**：文字 + 文件 / 图片消息、已读状态、2 分钟内撤回、长按多选批量删除
+- **私聊**：文字 + 语音消息 + 文件 / 图片消息、已读状态、2 分钟内撤回、长按多选批量删除
 - **实时消息**：WebSocket 长连接推送；自动重连 + 离线补同步；断网自动降级轮询
-- **聊天背景**：每好友独立设置（≤10MB，超限自动压缩）
-- **通知中心**：好友申请 / 新消息 / 文件通知，左滑删除、已读角标、系统通知栏
+- **聊天背景**：每好友独立设置（≤10MB，超限自动压缩），进入页面即用本地缓存秒开
+- **通知中心**：好友申请 / 新消息 / 文件通知，左滑删除、已读角标
 - **动态**：朋友圈式发布、可见性控制、点赞（取消）
 - **个人主页**：头像 / 性别 / 签名，支持头像裁剪上传
+
+### 📞 音视频通话（WebRTC P2P）
+- **一对一语音通话**：来电提示（接听 / 拒绝）、通话时长、麦克风开关、听筒 / 扬声器切换、回声消除
+- **一对一视频通话**：前置摄像头、远端全屏 + 本地小窗、**大小屏点击切换**（srcObject 不动，零中断零闪烁）、摄像头开关、前后摄像头热切换
+- **完整状态机**：呼叫 / 接听 / 拒绝 / 取消（45s 无应答）/ 挂断 / 网络断开收敛，通话记录落库并在聊天流展示
+- **信令**：复用现有 WebSocket 通道（`call_*` 白名单消息）；媒体传输 WebRTC P2P + 免费 STUN（Google / 腾讯 / 小米），**无任何付费 TURN / 云服务**
+- **统一图标**：接通（绿）与挂断（红）为同一电话造型（挂断旋转 135°），仅颜色区分
+
+### 🔔 系统通知
+- **三态可达**：App 后台 / 不在前台 / 完全退出（前台服务 + 原生 WebSocket 独立于 WebView）
+- **按会话合并**：同一好友连续消息更新同一通知（「[N 条新消息]」+ 最新内容 + 角标数字），不刷屏
+- **通知格式**：标题「来自 XXX 的消息」+ 消息正文（语音显示「[语音] N秒」）
+- **点击直达**：通知携带发送者昵称，点击直接进入对应聊天页
+- **开机自恢复**：手机重启后已登录即自动拉起通知服务
+- **幂等去重**：notified/pending/ack 服务端标记 + WS 与补发双通道按消息 ID 去重，绝不重复提醒
+
+### ⚡ 加载性能
+- **先显示 → 后台刷新 → 变化才局部刷新**：聊天页 / 个人主页 / 好友列表均本地缓存秒开
+- **历史消息分批加载**：滚动到顶部自动加载更早 50 条（游标分页），滚动位置不跳动
+- **好友列表持久化**：localStorage 瘦身缓存，App 重启首次打开也秒显
 
 ### 🌐 公网访问
 - **Cloudflare Tunnel 一键接入**：不买云服务器、不改业务，本地 FastAPI 映射公网
 - 免费快速隧道（trycloudflare.com），HTTP + WebSocket 转发
-- `/ws` 业务实时通道 + `/ws/echo` 连通性验证端点
+- `/ws` 业务实时通道（聊天信令 + 通话信令）+ `/ws/echo` 连通性验证端点
 - 公网地址 App 内单点配置（账户与安全 → 服务器地址），代码零硬编码
 - 公网安全：调试接口一律 404；SQLite 与文件目录不暴露；鉴权 / 管理员双因素保留
 
@@ -54,14 +74,18 @@
 ```
 Android App（单 Activity + 单 WebView）
         │  assets/index.html（单文件前端，IIFE 封装，JS 全部内联）
+        │  原生桥：通知服务 / 通话音频路由 / 摄像头权限 / 下载 / LLM 保活
         ▼
 FastAPI（Python，server/）
    ├─ routers/  auth / friendship / message / file / notification / moments / admin
+   ├─ call.py   通话信令状态机（invite/accept/reject/cancel/end/relay + 断线收敛 + 记录落库）
+   ├─ ws_hub.py WebSocket 实时通道（聊天 + 通话信令共用）
    ├─ db.py     SQLite（增量迁移 _SCHEMA）
    ├─ captcha.py / slider_captcha.py / sms.py / stores.py（KVStore 抽象，可换 Redis）
    └─ 静态托管 /app（浏览器直接访问客户端）
-        ▼
-SQLite（server/data/vocab_auth.db）
+
+媒体平面（P2P，不经过服务器）：
+   App A ⇄ WebRTC（免费 STUN 打洞）⇄ App B
 ```
 
 | 层 | 技术 |
@@ -72,6 +96,8 @@ SQLite（server/data/vocab_auth.db）
 | 认证 | Argon2id + PyJWT（Access / Refresh 旋转） |
 | 验证码 | PIL 程序化生成图形码 / 滑块拼图（缺口 x 仅存服务端，容差 8px） |
 | 实时通信 | WebSocket（`/ws`），自动重连 + 离线补同步 |
+| 音视频通话 | WebRTC P2P（免费 STUN：Google / 腾讯 / 小米），WebSocket 仅信令 |
+| 系统通知 | 原生前台服务（NotifyService）+ 原生 OkHttp WebSocket，独立于 WebView |
 | 公网 | Cloudflare Tunnel（cloudflared.exe） |
 
 ---
@@ -94,8 +120,8 @@ cd server
 ### 2. 构建 Android App
 
 ```powershell
-.\gradlew.bat assembleDebug
-# 产物：app\build\outputs\apk\debug\app-debug.apk
+.\gradlew.bat assembleRelease
+# 产物：app\build\outputs\apk\release\app-release.apk
 ```
 
 > 本机 Android SDK 默认路径 `C:\Users\wxh06\AppData\Local\Android\sdk`，如不同请设置 `ANDROID_HOME` 或在 `local.properties` 写入 `sdk.dir=...`（`local.properties` 已被 `.gitignore` 排除）。
@@ -118,6 +144,13 @@ cd server
 
 > ⚠️ 免费隧道每次启动地址会变；保持启动窗口开启即保持公网可达；电脑关机 / 关窗 = 异地不可访问（正常行为）。
 
+### 5. 音视频通话说明
+
+- 通话双方需互为好友，从对方个人主页 →「通话」发起
+- 首次使用需授权麦克风（语音）/ 麦克风 + 摄像头（视频）权限
+- 媒体走 WebRTC P2P 直连（免费 STUN 打洞），信令走现有 WebSocket；极端 NAT 环境若无法 P2P，优先排查网络，**不引入付费 TURN**
+- 通知功能需授予系统通知权限（登录后自动弹窗申请一次）
+
 ---
 
 ## 📁 目录结构
@@ -127,16 +160,16 @@ CET4Prep-Android/
 ├── app/
 │   └── src/main/
 │       ├── assets/
-│       │   ├── index.html              # 单文件前端（全部 UI + 逻辑 + IIFE）
+│       │   ├── index.html              # 单文件前端（全部 UI + 逻辑 + IIFE，含 WebRTC 通话）
 │       │   ├── katex/                  # KaTeX 数学渲染（css + js + 字体）
 │       │   ├── book1.json ~ book6.json # 内置词书
 │       │   └── kaoyan.json
 │       ├── java/com/example/cet4/
-│       │   ├── MainActivity.java       # WebView + JS 桥（通知 / 下载 / 保活 / LLM）
+│       │   ├── MainActivity.java       # WebView + JS 桥（通知 / 下载 / 保活 / LLM / 通话音频 / 摄像头权限）
 │       │   ├── LocalLlm.kt             # LiteRT-LM 离线推理
 │       │   ├── ModelKeepAliveService.java  # 本地 LLM 前台保活
-│       │   ├── NotifyService.java      # 消息 / 通知系统通知栏服务
-│       │   └── ReminderReceiver.java   # 每日提醒
+│       │   ├── NotifyService.java      # 消息系统通知（前台服务 + 原生 WS + 按会话合并）
+│       │   └── ReminderReceiver.java   # 每日提醒 + 开机自恢复
 │       └── res/                        # 图标 / 主题 / 字符串
 │
 ├── server/
@@ -147,7 +180,8 @@ CET4Prep-Android/
 │   ├── sms.py                          # Mock 短信 Provider
 │   ├── stores.py                       # 内存 KVStore 抽象
 │   ├── social_util.py                  # 好友 / 聊天公共逻辑
-│   ├── ws_hub.py                       # WebSocket 实时通道
+│   ├── ws_hub.py                       # WebSocket 实时通道（聊天 + 通话信令）
+│   ├── call.py                         # 通话信令状态机 + 记录落库 + 断线收敛
 │   ├── routers/                        # auth / friendship / message / file / notification / moments / admin
 │   ├── tunnel/                         # cloudflared 启动脚本
 │   ├── setup.bat                       # 一键创建虚拟环境 + 安装依赖
@@ -158,7 +192,7 @@ CET4Prep-Android/
 ├── gradle/                             # Gradle wrapper
 ├── build.gradle / settings.gradle
 ├── gradlew / gradlew.bat
-├── .gitignore                          # 已排除构建 / 缓存 / 敏感数据
+├── .gitignore                          # 已排除构建 / 缓存 / 敏感数据 / 测试脚本 / 安装包
 ├── LICENSE                             # MIT
 └── CHANGELOG.md                        # 版本历史
 ```
@@ -210,6 +244,7 @@ CET4Prep-Android/
 - **短信验证码**：Mock Provider 随机 6 位（不引入万能码），TTL / 冷却 / 失败作废 / 一次性
 - **管理员**：隐藏入口 + 双因素认证，管理接口均需鉴权，不因公网暴露而绕过
 - **公网防护**：调试接口（短信 / 图形码明文 / 滑块缺口）经 Tunnel 一律 404；SQLite 与文件目录未挂载到 HTTP
+- **通话信令**：`call_*` 上行白名单 + call_id 归属校验，伪造上行（冒充对端挂断等）一律拒绝
 - **输入校验**：Pydantic 模型 + 长度 / 格式 / 强度校验 + 统一错误文案（防账号枚举）
 
 ---
@@ -220,6 +255,7 @@ CET4Prep-Android/
 |---|---|
 | 改前端 UI / 交互 | `app/src/main/assets/index.html`（单文件，改完直接重打包 APK） |
 | 加后端路由 | `server/routers/` 模仿现有文件加 `xxx.py`，再在 `main.py` 里 `include_router` |
+| 改通话逻辑 | `server/call.py`（信令状态机）+ index.html `call*` 函数（前端 WebRTC） |
 | 换数据库 | `server/stores.py`（KVStore 抽象）+ `server/db.py`（SQL 拆出来） |
 | 接 Redis | 实现 `stores.py` 同样的接口替换 |
 | 自定义词书 | JSON / CSV / TXT 均可，App 内导入入口在词书列表 |
@@ -238,9 +274,10 @@ CET4Prep-Android/
 - [FastAPI](https://fastapi.tiangolo.com/) / [uvicorn](https://www.uvicorn.org/)
 - [Argon2](https://github.com/P-H-C/phc-winner-argon2) / [PyJWT](https://pyjwt.readthedocs.io/)
 - [KaTeX](https://katex.org/)
+- [WebRTC](https://webrtc.org/)（音视频 P2P 传输）
 - [LiteRT-LM](https://ai.google.dev/edge/litert) / Gemma
 - [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
 
 ---
 
-> ⚠️ `server/.admin_credentials.txt` / `server/.secret_key` / `server/data/`（SQLite + 上传文件）为运行时生成的敏感 / 用户数据，**已在 `.gitignore` 排除，不会进入仓库**。首次启动会自动生成管理员凭证与 JWT 密钥。
+> ⚠️ `server/.admin_credentials.txt` / `server/.secret_key` / `server/data/`（SQLite + 上传文件 + 发布 APK）为运行时生成的敏感 / 用户数据，**已在 `.gitignore` 排除，不会进入仓库**。首次启动会自动生成管理员凭证与 JWT 密钥。测试脚本（`server/test_*.py`）与安装包（`*.apk`）同样仅保留在本地，不上传仓库。
