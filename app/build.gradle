@@ -41,9 +41,10 @@ android {
            v9.119：语音消息（按开闭原则扩展——复用文件上传/消息持久化/WS 实时通道；新增 mic/pause/keyboard 图标 + 录音条 UI + MediaRecorder 录制 + 上滑取消 + 语音条播放缓存）
            v9.125：一对一语音通话（WebRTC P2P + 免费 STUN；WS 信令 + 通话全屏页 + 听筒/扬声器原生路由 + 通话记录落库）
            v9.126：通话连接修复（setRemoteDescription 参数嵌套错误致接通即挂断；ICE 队列排水；补国内免费 STUN；30s 连接兜底）
-           v9.127：通话音频修复（WebView 自动播放策略致主叫无声；显式 AEC/降噪/自动增益抑制回音啸叫；播放被拒自动重试）*/
-        versionCode 91
-        versionName '9.127'
+           v9.127：通话音频修复（WebView 自动播放策略致主叫无声；显式 AEC/降噪/自动增益抑制回音啸叫；播放被拒自动重试）
+           v9.128：外放回音抑制（采集即进通信模式让硬件 AEC 全程参与；扬声器模式远端音量限制压环路增益消啸叫；单声道采集）*/
+        versionCode 92
+        versionName '9.128'
     }
 
     buildTypes {

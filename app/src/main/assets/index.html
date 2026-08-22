@@ -6197,8 +6197,9 @@ var CALL_ICE={iceServers:[{urls:[
   "stun:stun.qq.com:3478","stun:stun.miwifi.com:3478",
   "stun:stun.l.google.com:19302","stun:stun1.l.google.com:19302"]}]};
 var CALL_NOANSWER_MS=45000;   /* 主叫 45s 无应答自动取消（未接听） */
-/* v9.127：显式开启回声消除/降噪/自动增益 —— 双方扬声器外放时抑制声学回授（回音/啸叫） */
-var CALL_GUM_OPT={audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}};
+/* v9.127：显式开启回声消除/降噪/自动增益 —— 双方扬声器外放时抑制声学回授（回音/啸叫）
+   v9.128：强制单声道（channelCount:1）—— AEC 参考信号对齐更稳，立体声回音消除难度高 */
+var CALL_GUM_OPT={audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}};
 /* v9.122 经验复用：首次 getUserMedia 失败（NotReadableError）用关闭处理组件的降级约束重试一次 */
 function callGum(cb){
   navigator.mediaDevices.getUserMedia(CALL_GUM_OPT).then(cb).catch(function(e1){
@@ -6234,6 +6235,7 @@ function voiceCallStart(pid,nm,av){
     callState={id:cid, pid:pid, nm:nm||"对方", av:av||"", role:"caller", status:"dialing",
       pc:null, local:stream, t0:0, timer:null, noAns:null, muted:false, speaker:false,
       ringT:null, iceQ:[], acceptedLocal:false, connT:null};
+    callNativeBegin();                          /* v9.128：采集开始即进通信模式，硬件 AEC 全程参与 */
     callRender();
     wsSend({type:"call_invite", to:pid, call_id:cid});
     callRing("back");                              /* 主叫回铃 */
@@ -6270,6 +6272,7 @@ function callAccept(){
     callState.local=stream;
     callState.acceptedLocal=true;
     callState.status="connecting";
+    callNativeBegin();                          /* v9.128：采集开始即进通信模式，硬件 AEC 全程参与 */
     callRingStop();
     callRender();
     wsSend({type:"call_accept", call_id:callState.id});
@@ -6304,7 +6307,14 @@ function callToggleMic(){
   callState.local.getAudioTracks().forEach(function(t){ t.enabled=!callState.muted; });
   callRender();
 }
-/* 扬声器/听筒切换（原生 AudioManager；浏览器环境仅提示） */
+/* 扬声器/听筒切换（原生 AudioManager；浏览器环境仅提示）
+   v9.128：扬声器模式限制远端播放音量 —— 环路增益（扬声器→麦克风→对端→扬声器）压到 1 以下，
+   消除外放啸叫；听筒贴耳音量小，恢复满音量 */
+var CALL_SPK_VOL=0.85;
+function callApplyVol(){
+  var au=document.getElementById("callRemote");
+  if(au && callState){ try{ au.volume=callState.speaker?CALL_SPK_VOL:1; }catch(e){} }
+}
 function callToggleSpeaker(){
   if(!callState) return;
   callState.speaker=!callState.speaker;
@@ -6313,6 +6323,7 @@ function callToggleSpeaker(){
   } else {
     toast(callState.speaker?"扬声器模式（原生端生效）":"听筒模式（原生端生效）","info");
   }
+  callApplyVol();
   callRender();
 }
 /* WS 信令事件统一入口 */
@@ -6388,6 +6399,7 @@ function callCreatePc(){
     if(au && ev.streams && ev.streams[0]){
       try{
         au.srcObject=ev.streams[0];
+        callApplyVol();                        /* v9.128：按当前听筒/扬声器状态设定音量 */
         var p=au.play();
         if(p&&p.catch) p.catch(function(){ setTimeout(function(){ var q=au.play(); if(q&&q.catch) q.catch(function(){}); },400); });
       }catch(e){}
@@ -6547,7 +6559,7 @@ function callCleanup(msg){
   try{ if(c.pc) c.pc.close(); }catch(e){}
   /* 远端音频复位 */
   var au=document.getElementById("callRemote");
-  if(au){ try{ au.pause(); au.srcObject=null; }catch(e){} }
+  if(au){ try{ au.pause(); au.srcObject=null; au.volume=1; }catch(e){} }
   callNativeEnd();
   callRingStop();
   callState=null;
