@@ -54,3 +54,7 @@ server/tunnel/cloudflared.log
 # ========== 桌面启动脚本（按需放回） ==========
 # 启动*.bat
 启动*.bat
+
+# 隔离的旧 build 产物（待清理）
+_DELETE_ME_OLD_BUILD_*/
+

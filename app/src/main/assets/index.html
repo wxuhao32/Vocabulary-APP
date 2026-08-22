@@ -856,6 +856,32 @@ hr.sep{border:none;border-top:1px dashed var(--line);margin:14px 0}
 .acc-act{color:var(--ink-3);display:flex;align-items:center}
 .acc-act.danger{color:var(--red)}
 .acc-arrow{flex:none;color:var(--ink-3);margin-left:-2px}
+/* ============ v9.125：语音通话全屏页（来电 / 呼出 / 通话中） ============ */
+.call-page{position:fixed;inset:0;z-index:220;background:linear-gradient(160deg,#1B3A57 0%,#15314B 58%,#122A40 100%);display:none;flex-direction:column;align-items:center;color:#fff;overflow:hidden}
+.call-page.on{display:flex;animation:fade .25s ease}
+.call-top{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;padding:calc(26px + env(safe-area-inset-top)) 20px 0;font-size:13px;font-weight:700;color:rgba(255,255,255,.72);letter-spacing:.03em}
+.call-mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;width:100%;padding:0 30px}
+.call-av{width:104px;height:104px;border-radius:50%;overflow:hidden;box-shadow:0 0 0 10px rgba(255,255,255,.07),0 0 0 22px rgba(255,255,255,.035),0 18px 46px rgba(0,0,0,.4);margin-bottom:22px}
+.call-av img{width:100%;height:100%;object-fit:cover;display:block}
+.call-av-ic{width:104px;height:104px;border-radius:50%;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.85);margin-bottom:22px;box-shadow:0 0 0 10px rgba(255,255,255,.07),0 0 0 22px rgba(255,255,255,.035)}
+.call-nm{font-size:21px;font-weight:800;max-width:80vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.call-st{font-size:13.5px;color:rgba(255,255,255,.66);margin-top:8px;min-height:20px}
+.call-timer{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.05em;margin-top:14px;display:none}
+.call-timer.on{display:block}
+.call-pulse{animation:callPulse 2.4s ease-in-out infinite}
+@keyframes callPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}
+.call-bot{width:100%;padding:0 34px calc(44px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:10px}
+.call-btns{display:flex;align-items:center;justify-content:center;gap:38px}
+.call-fab{width:66px;height:66px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(255,255,255,.13);transition:.15s;position:relative}
+.call-fab:active{transform:scale(.92)}
+.call-fab .ic{filter:drop-shadow(0 2px 6px rgba(0,0,0,.3))}
+.call-fab.red{background:linear-gradient(150deg,#E85A46,#D64535);box-shadow:0 8px 22px rgba(214,69,53,.42)}
+.call-fab.green{background:linear-gradient(150deg,#3CB57F,#2E9E6B);box-shadow:0 8px 22px rgba(46,158,107,.42)}
+.call-fab.on{background:rgba(255,255,255,.92);color:#15314B}
+.call-fab-lb{position:absolute;bottom:-24px;left:50%;transform:translateX(-50%);font-size:11px;color:rgba(255,255,255,.62);white-space:nowrap;font-weight:600}
+/* 聊天页通话记录（居中系统行） */
+.msg-call{display:flex;align-items:center;justify-content:center;gap:6px;margin:10px auto 2px;max-width:78%;width:-webkit-fit-content;width:fit-content;padding:6px 13px;border-radius:999px;background:var(--bg-2);color:var(--ink-3);font-size:12px;font-weight:600}
+.msg-call .ic{color:var(--ink-3)}
 /* 登录 / 账户二级页（全屏覆盖层） */
 .login-page{position:fixed;inset:0;z-index:120;background:var(--bg);display:none;flex-direction:column;overflow-y:auto}
 .login-page.on{display:flex}
@@ -1166,6 +1192,9 @@ hr.sep{border:none;border-top:1px dashed var(--line);margin:14px 0}
 <!-- v9.93：管理员系统（隐藏入口触发，普通用户不可见） -->
 <div id="adminAuthPage" class="login-page"></div>
 <div id="adminPage" class="login-page"></div>
+<!-- v9.125：语音通话全屏页（来电 / 呼出 / 通话中）+ 远端音频播放元素 -->
+<div id="callPage" class="call-page"></div>
+<audio id="callRemote" autoplay playsinline style="display:none"></audio>
 
 <!-- AI 查词（全屏界面，默认隐藏，屏幕顶部下滑弹出） -->
 <div class="aipanel" id="aipanel">
@@ -1491,7 +1520,13 @@ var ICONS={
  /* v9.119：语音消息图标 */
  mic:'<rect x="9" y="3.4" width="6" height="10.6" rx="3"/><path d="M5.4 11.4a6.6 6.6 0 0 0 13.2 0"/><path d="M12 18v2.8"/>',
  pause:'<rect x="6.4" y="4.8" width="3.6" height="14.4" rx="1.4"/><rect x="14" y="4.8" width="3.6" height="14.4" rx="1.4"/>',
- keyboard:'<rect x="2.8" y="6.4" width="18.4" height="11.2" rx="2.4"/><path d="M6.4 10h.01M10 10h.01M13.6 10h.01M17.2 10h.01M6.4 13.4h11.2"/>'
+ keyboard:'<rect x="2.8" y="6.4" width="18.4" height="11.2" rx="2.4"/><path d="M6.4 10h.01M10 10h.01M13.6 10h.01M17.2 10h.01M6.4 13.4h11.2"/>',
+ /* v9.124/v9.125：通话图标（听筒 / 摄像机 / 挂断 / 静麦 / 扬声器） */
+ call:'<path d="M21.2 16.6v2.7a2 2 0 0 1-2.2 2 19.2 19.2 0 0 1-8.4-3 19 19 0 0 1-5.8-5.8 19.2 19.2 0 0 1-3-8.4 2 2 0 0 1 2-2.2h2.7a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.4 2.1l-1.1 1.1a15.4 15.4 0 0 0 5.8 5.8l1.1-1.1a2 2 0 0 1 2.1-.4c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/>',
+ video:'<rect x="2.8" y="6.4" width="12.4" height="11.2" rx="2.6"/><path d="M15.2 10.6l5.2-3v8.8l-5.2-3"/>',
+ phoneOff:'<path d="M21.2 16.6v2.7a2 2 0 0 1-2.2 2 19.2 19.2 0 0 1-8.4-3 19 19 0 0 1-5.8-5.8 19.2 19.2 0 0 1-3-8.4 2 2 0 0 1 2-2.2h2.7a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.4 2.1l-1.1 1.1a15.4 15.4 0 0 0 5.8 5.8l1.1-1.1a2 2 0 0 1 2.1-.4c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/><path d="M3.2 3.2l17.6 17.6"/>',
+ micOff:'<rect x="9" y="3.4" width="6" height="10.6" rx="3"/><path d="M5.4 11.4a6.6 6.6 0 0 0 13.2 0"/><path d="M12 18v2.8"/><path d="M4 4l16 16"/>',
+ speaker:'<path d="M4 9.4v5.2h3.6L12 18.6V5.4L7.6 9.4z"/><path d="M15.4 9.2a4.1 4.1 0 0 1 0 5.6"/><path d="M18.1 6.4a8 8 0 0 1 0 11.2"/>'
 };
 function icon(n,s,cls){
   return '<svg class="ic '+(cls||'')+'" viewBox="0 0 24 24" width="'+(s||20)+'" height="'+(s||20)+'" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+(ICONS[n]||'')+'</svg>';
@@ -4517,8 +4552,10 @@ function wsOnMessage(raw){
     case "cleared": wsOnCleared(obj); break;
     case "notification": wsOnNotification(obj); break;
     case "friend_removed": wsOnFriendRemoved(obj); break;
-    case "error":
-      if(obj.code==="unauthorized" && !wsState.authRefreshing) tryRefreshReconnect();
+    case "call_state": break;   /* v9.125：服务端通用通话状态回执（当前前端按具体事件处理，预留） */
+    default:
+      /* v9.125：语音通话信令（call_invite / call_accept / call_reject / call_cancel / call_end / call_offer / call_answer / call_ice） */
+      if(String(obj.type).indexOf("call_")===0){ callOnSignal(obj); }
       break;
   }
 }
@@ -5163,6 +5200,17 @@ function chatMsgHtml(m){
       '<div class="msg-col"><div class="msg-revoked">'+tip+'</div><div class="msg-t">'+t+'</div></div></div>';
   }
   var body;
+  /* v9.125：通话记录（居中系统行，无头像/已读；content 为 JSON {event,duration}） */
+  if(m.type==="call"){
+    var ev="", cdur=0;
+    try{ var co=JSON.parse(m.content||"{}"); ev=co.event||""; cdur=parseInt(co.duration||0,10)||0; }catch(e){}
+    var ctxt = ev==="end" ? "通话 "+callFmtDur(cdur)
+             : ev==="missed" ? "未接听"
+             : ev==="rejected" ? "已拒绝"
+             : ev==="canceled" ? "已取消" : "通话";
+    return '<div class="msg-row '+m.sender+'" data-mid="'+m.id+'" data-me="'+(isMe?"1":"0")+'" data-revoked="0" data-ct="'+esc(m.created_at||"")+'">'+
+      '<div class="msg-call">'+icon("call",13)+'<span>'+esc(ctxt)+'</span><span>'+t+'</span></div></div>';
+  }
   if(m.type==="file"){
     var name=(m.content||"").replace(/^\[文件\]\s*/,"");
     /* v9.117：本地上传状态（sending=进度环 / error=失败重试），不阻塞聊天 UI */
@@ -6069,6 +6117,8 @@ function renderProfile(u){
   var acts='';
   if(u.friend_status==="friends" && u.black_status==="none"){
     acts+='<button class="btn btn-p" style="min-width:150px;justify-content:center" data-act="sendMsgFromProfile">'+icon("chat",16)+'发消息</button>';
+    /* v9.125：通话入口（次级按钮，与发消息并排）—— 语音通话已接入 WebRTC，视频通话暂未实现 */
+    acts+='<button class="btn btn-g" style="min-width:96px;justify-content:center" data-act="profileCall">'+icon("call",16)+'通话</button>';
   }
   var moreBtn = (u.friend_status==="friends" || u.black_status!=="none" || u.friend_status==="none" || u.friend_status==="pending_received")
     ? '<button class="iconbtn" data-act="profileMore" title="更多操作">'+icon("more",20)+'</button>' : '';
@@ -6135,6 +6185,375 @@ function sendMsgFromProfile(){
   var pid=(document.getElementById("profilePage").getAttribute("data-pid"))||"";
   var nm=document.querySelector("#profilePage .pf-nm"); var n2=nm?nm.textContent:"";
   closeProfilePage(); openChatPage(pid, n2);
+}
+/* =========================================================
+   v9.125：一对一实时语音通话（WebRTC P2P + 免费 STUN，信令走既有 /ws）
+   状态机：dialing(呼出) / incoming(来电) / connecting / active
+   终态收敛：reject / cancel / miss(45s) / hangup / 对端断网 → callCleanup
+   ========================================================= */
+var callState=null;
+/* v9.126：补国内免费 STUN（腾讯/小米）——Google STUN 大陆网络不可达会拖慢 ICE 收集 */
+var CALL_ICE={iceServers:[{urls:[
+  "stun:stun.qq.com:3478","stun:stun.miwifi.com:3478",
+  "stun:stun.l.google.com:19302","stun:stun1.l.google.com:19302"]}]};
+var CALL_NOANSWER_MS=45000;   /* 主叫 45s 无应答自动取消（未接听） */
+/* v9.127：显式开启回声消除/降噪/自动增益 —— 双方扬声器外放时抑制声学回授（回音/啸叫） */
+var CALL_GUM_OPT={audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}};
+/* v9.122 经验复用：首次 getUserMedia 失败（NotReadableError）用关闭处理组件的降级约束重试一次 */
+function callGum(cb){
+  navigator.mediaDevices.getUserMedia(CALL_GUM_OPT).then(cb).catch(function(e1){
+    if(e1 && e1.name==="NotReadableError"){
+      navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
+        .then(cb).catch(function(){ toast("无法访问麦克风，请检查权限","warn"); });
+    } else {
+      toast("无法访问麦克风（"+((e1&&e1.name)||"未知错误")+"），请检查权限","warn");
+    }
+  });
+}
+/* 入口：个人主页「通话」弹窗（语音已实现 / 视频开发中） */
+function profileCall(){
+  var items=
+    '<button class="btn btn-block" style="margin-bottom:8px" data-act="callVoice">'+icon("call",15)+'语音通话</button>'+
+    '<button class="btn btn-block" style="margin-bottom:8px" data-act="callVideo">'+icon("video",15)+'视频通话</button>';
+  openModal("发起通话", items,
+    '<button class="btn btn-g" data-mclose="1">取消</button>');
+}
+/* 语音通话发起（主叫）：先拿麦克风 → WS 发 call_invite → 等对方接听 */
+function voiceCallStart(pid,nm,av){
+  if(!pid) return;
+  if(callState){ toast("当前已在通话中","warn"); return; }
+  if(!wsState.connected || !wsState.ws || wsState.ws.readyState!==1){ toast("网络连接未就绪，请稍后再试","warn"); return; }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.RTCPeerConnection){
+    toast("当前环境不支持语音通话","warn"); return;
+  }
+  closeModal();
+  toast("正在开启麦克风…","info");
+  callGum(function(stream){
+    if(callState){ try{ stream.getTracks().forEach(function(t){t.stop();}); }catch(e){} return; }
+    var cid=uid();
+    callState={id:cid, pid:pid, nm:nm||"对方", av:av||"", role:"caller", status:"dialing",
+      pc:null, local:stream, t0:0, timer:null, noAns:null, muted:false, speaker:false,
+      ringT:null, iceQ:[], acceptedLocal:false, connT:null};
+    callRender();
+    wsSend({type:"call_invite", to:pid, call_id:cid});
+    callRing("back");                              /* 主叫回铃 */
+    callState.noAns=setTimeout(function(){          /* 45s 无应答 → 未接听 */
+      if(callState && callState.role==="caller" && callState.status==="dialing"){
+        wsSend({type:"call_cancel", call_id:callState.id, reason:"timeout"});
+        callCleanup("对方无应答，通话未接通");
+      }
+    }, CALL_NOANSWER_MS);
+  });
+}
+/* 来电（被叫）：显示接听/拒绝界面 */
+function callIncoming(o){
+  var f=o.from||{};
+  if(callState){ wsSend({type:"call_reject", call_id:o.call_id}); return; }   /* 忙线自动拒绝 */
+  callState={id:o.call_id, pid:f.id||"", nm:f.nickname||"好友", av:f.avatar||"", role:"callee",
+    status:"incoming", pc:null, local:null, t0:0, timer:null, noAns:null, muted:false,
+    speaker:false, ringT:null, iceQ:[], acceptedLocal:false, connT:null};
+  callRender();
+  callRing("in");
+  try{ if(navigator.vibrate) navigator.vibrate([500,300,500,300,500]); }catch(e){}
+  callState.noAns=setTimeout(function(){           /* 兜底：主叫超时会先取消；此为界面自复位 */
+    if(callState && callState.role==="callee" && callState.status==="incoming"){
+      callCleanup("来电已结束");
+    }
+  }, CALL_NOANSWER_MS+15000);
+}
+/* 被叫点击「接听」：拿麦克风 → call_accept → 等主叫 offer */
+function callAccept(){
+  if(!callState || callState.status!=="incoming") return;
+  callStatus("正在接听…");
+  navigator.mediaDevices.getUserMedia(CALL_GUM_OPT).then(function(stream){
+    if(!callState || callState.status!=="incoming"){ try{ stream.getTracks().forEach(function(t){t.stop();}); }catch(e){} return; }
+    callState.local=stream;
+    callState.acceptedLocal=true;
+    callState.status="connecting";
+    callRingStop();
+    callRender();
+    wsSend({type:"call_accept", call_id:callState.id});
+  }).catch(function(e){
+    wsSend({type:"call_reject", call_id:callState.id});
+    callCleanup("无法访问麦克风，通话未接通");
+  });
+}
+/* 被叫点击「拒绝」 */
+function callReject(){
+  if(!callState) return;
+  wsSend({type:"call_reject", call_id:callState.id});
+  callCleanup();
+}
+/* 主叫呼出阶段取消 */
+function callCancel(){
+  if(!callState) return;
+  wsSend({type:"call_cancel", call_id:callState.id, reason:"user"});
+  callCleanup();
+}
+/* 通话中挂断（双方通用）：上报时长由服务端落通话记录 */
+function callHangup(){
+  if(!callState) return;
+  var dur=callState.t0? Math.floor((Date.now()-callState.t0)/1000):0;
+  wsSend({type:"call_end", call_id:callState.id, duration:dur});
+  callCleanup("通话已结束");
+}
+/* 麦克风开关 */
+function callToggleMic(){
+  if(!callState || !callState.local) return;
+  callState.muted=!callState.muted;
+  callState.local.getAudioTracks().forEach(function(t){ t.enabled=!callState.muted; });
+  callRender();
+}
+/* 扬声器/听筒切换（原生 AudioManager；浏览器环境仅提示） */
+function callToggleSpeaker(){
+  if(!callState) return;
+  callState.speaker=!callState.speaker;
+  if(typeof App!=="undefined" && App && App.callSetSpeaker){
+    try{ App.callSetSpeaker(!!callState.speaker); }catch(e){}
+  } else {
+    toast(callState.speaker?"扬声器模式（原生端生效）":"听筒模式（原生端生效）","info");
+  }
+  callRender();
+}
+/* WS 信令事件统一入口 */
+function callOnSignal(o){
+  var t=o.type;
+  if(t==="call_invite"){ callIncoming(o); return; }
+  if(!callState || o.call_id!==callState.id){
+    if(t==="call_invite") return;
+    /* 多设备：call_accept 广播给被叫全部连接 —— 非本通话说得通的一律忽略 */
+    return;
+  }
+  switch(t){
+    case "call_ringing": callStatus("正在等待对方接听…"); break;
+    case "call_accept":
+      if(callState.role==="caller" && callState.status==="dialing"){
+        callState.status="connecting";
+        callRingStop();
+        callRender();
+        callStatus("正在建立连接…");
+        callCreatePc();                       /* 主叫在此创建 PC 并发 offer */
+        callState.pc.createOffer().then(function(offer){
+          return callState.pc.setLocalDescription(offer);
+        }).then(function(){
+          wsSend({type:"call_offer", call_id:callState.id, sdp:callState.pc.localDescription});
+          callDrainIce();
+        }).catch(function(e){ callFailNet("创建连接失败"); });
+      } else if(callState.role==="callee" && !callState.acceptedLocal){
+        callCleanup("已在其他设备接听");       /* 多设备来电收敛 */
+      }
+      break;
+    case "call_offer":
+      if(callState.role!=="callee" || callState.status!=="connecting") return;
+      callCreatePc();
+      /* v9.126 修复：o.sdp 本身就是 {type,sdp} 完整对象（主叫发的是 pc.localDescription），
+         之前误包一层 {type:"offer",sdp:o.sdp} → sdp 字段变对象 → setRemoteDescription 抛异常
+         → 接通即"建立连接失败"自动挂断 */
+      callState.pc.setRemoteDescription(o.sdp).then(function(){
+        return callState.pc.createAnswer();
+      }).then(function(ans){
+        return callState.pc.setLocalDescription(ans);
+      }).then(function(){
+        wsSend({type:"call_answer", call_id:callState.id, sdp:callState.pc.localDescription});
+        callDrainIce();
+      }).catch(function(e){ callFailNet("建立连接失败"); });
+      break;
+    case "call_answer":
+      if(callState.role!=="caller" || !callState.pc) return;
+      /* v9.126 修复：同上，直接传 o.sdp；answer 落定后排空缓存的被叫 ICE 候选 */
+      callState.pc.setRemoteDescription(o.sdp).then(function(){
+        callDrainIce();
+      }).catch(function(e){ callFailNet("连接应答失败"); });
+      break;
+    case "call_ice": callApplyIce(o.candidate); break;
+    case "call_reject": callCleanup("对方已拒绝"); break;
+    case "call_cancel": callCleanup("对方已取消"); break;
+    case "call_end":
+      callCleanup("通话已结束"+(o.duration?" · "+callFmtDur(o.duration):""));
+      break;
+    case "call_fail":
+      callCleanup(o.reason||"通话未接通");
+      break;
+  }
+}
+function callCreatePc(){
+  if(!callState || callState.pc) return;
+  var pc=new RTCPeerConnection(CALL_ICE);
+  callState.pc=pc;
+  try{ if(callState.local) callState.local.getTracks().forEach(function(tr){ pc.addTrack(tr, callState.local); }); }catch(e){}
+  /* 远端音频：绑定到常驻 <audio> 元素播放（听筒/扬声器路由由原生 AudioManager 控制）
+     v9.127：play() 被自动播放策略拒绝时延迟重试（配合原生 setMediaPlaybackRequiresUserGesture(false) 双保险） */
+  pc.ontrack=function(ev){
+    var au=document.getElementById("callRemote");
+    if(au && ev.streams && ev.streams[0]){
+      try{
+        au.srcObject=ev.streams[0];
+        var p=au.play();
+        if(p&&p.catch) p.catch(function(){ setTimeout(function(){ var q=au.play(); if(q&&q.catch) q.catch(function(){}); },400); });
+      }catch(e){}
+    }
+  };
+  pc.onicecandidate=function(ev){
+    if(ev.candidate) wsSend({type:"call_ice", call_id:callState.id, candidate:ev.candidate});
+  };
+  /* v9.126：connecting 兜底——30s 未连上明确提示失败（防止极端网络下无限等待） */
+  if(callState.connT) clearTimeout(callState.connT);
+  callState.connT=setTimeout(function(){
+    if(callState && callState.pc===pc && pc.connectionState!=="connected" && callState.status==="connecting"){
+      callFailNet("连接超时，当前网络可能无法建立 P2P 直连");
+    }
+  }, 30000);
+  pc.onconnectionstatechange=function(){
+    if(!callState || callState.pc!==pc) return;
+    var s=pc.connectionState;
+    if(s==="connected"){
+      if(callState.status!=="active"){
+        callState.status="active";
+        callState.t0=Date.now();
+        callRingStop();
+        callNativeBegin();
+        callRender();
+        callStartTimer();
+      }
+      if(callState.connT){ clearTimeout(callState.connT); callState.connT=null; }
+    } else if(s==="failed"){
+      callFailNet("连接失败，网络可能不支持 P2P 直连");
+    } else if(s==="disconnected"){
+      /* ICE 断开宽限 6s（瞬时抖动自恢复），期间提示 */
+      callStatus("网络不稳定，正在恢复…");
+      clearTimeout(callState.connT);
+      callState.connT=setTimeout(function(){
+        if(callState && callState.pc===pc && pc.connectionState!=="connected"){
+          wsSend({type:"call_end", call_id:callState.id,
+            duration:callState.t0? Math.floor((Date.now()-callState.t0)/1000):0});
+          callCleanup("网络中断，通话已结束");
+        }
+      }, 6000);
+    }
+  };
+}
+function callApplyIce(cand){
+  if(!cand || !callState) return;
+  if(!callState.pc || !callState.pc.remoteDescription){ callState.iceQ.push(cand); return; }
+  callState.pc.addIceCandidate(cand).catch(function(){});
+}
+function callDrainIce(){
+  if(!callState || !callState.pc) return;
+  var q=callState.iceQ; callState.iceQ=[];
+  q.forEach(function(c){ callApplyIce(c); });
+}
+function callFailNet(msg){
+  if(!callState) return;
+  var dur=callState.t0? Math.floor((Date.now()-callState.t0)/1000):0;
+  if(callState.status==="active"||callState.status==="connecting"){
+    wsSend({type:"call_end", call_id:callState.id, duration:dur});
+  }
+  callCleanup(msg);
+}
+/* ---------- UI ---------- */
+function callRender(){
+  var el=document.getElementById("callPage"); if(!el) return;
+  var c=callState; if(!c){ el.classList.remove("on"); el.innerHTML=""; return; }
+  var av=c.av? '<div class="call-av">'+socAvHtml(c.av)+'</div>'
+             : '<div class="call-av-ic">'+icon("user",46)+'</div>';
+  var pulse=(c.status==="dialing"||c.status==="incoming")?' class="call-pulse"':"";
+  var mid='<div class="call-mid">'+av+
+    '<div class="call-nm">'+esc(c.nm)+'</div>'+
+    '<div class="call-st" id="callSt">'+callStatusText()+'</div>'+
+    '<div class="call-timer'+(c.status==="active"?" on":"")+'" id="callTimer">'+(c.t0?callFmtDur(Math.floor((Date.now()-c.t0)/1000)):"00:00")+'</div>'+
+    '</div>';
+  var bot='';
+  if(c.status==="incoming"){
+    bot='<div class="call-btns" style="margin-top:34px">'+
+      '<button class="call-fab red" data-act="callReject" title="拒绝">'+icon("phoneOff",26)+'</button>'+
+      '<button class="call-fab green" data-act="callAccept" title="接听">'+icon("call",26)+'</button>'+
+      '</div>';
+  } else if(c.status==="dialing"){
+    bot='<div class="call-btns" style="margin-top:34px">'+
+      '<button class="call-fab red" data-act="callCancel" title="取消">'+icon("phoneOff",26)+'</button>'+
+      '</div>';
+  } else {
+    bot='<div class="call-btns" style="margin-top:34px">'+
+      '<button class="call-fab'+(c.muted?" on":"")+'" data-act="callMic" title="麦克风">'+icon(c.muted?"micOff":"mic",26)+'</button>'+
+      '<button class="call-fab red" data-act="callHangup" title="挂断">'+icon("phoneOff",30)+'</button>'+
+      '<button class="call-fab'+(c.speaker?" on":"")+'" data-act="callSpeaker" title="扬声器">'+icon("speaker",26)+'</button>'+
+      '</div>';
+  }
+  el.innerHTML='<div class="call-top">'+icon("call",15)+'语音通话'+(c.status==="active"?"":" · "+esc(c.pid))+'</div>'+mid+
+    '<div class="call-bot">'+bot+'</div>';
+  el.classList.add("on");
+}
+function callStatusText(){
+  var c=callState; if(!c) return "";
+  return c.status==="dialing"?"正在等待对方接听…":
+         c.status==="incoming"?"邀请你进行语音通话":
+         c.status==="connecting"?"正在建立连接…":"通话中";
+}
+function callStatus(txt){ var el=document.getElementById("callSt"); if(el&&txt) el.textContent=txt; }
+function callStartTimer(){
+  if(!callState || callState.timer) return;
+  callState.timer=setInterval(function(){
+    if(!callState || !callState.t0) return;
+    var el=document.getElementById("callTimer");
+    if(el) el.textContent=callFmtDur(Math.floor((Date.now()-callState.t0)/1000));
+  },1000);
+}
+function callFmtDur(s){ s=Math.max(0,s|0); var m=Math.floor(s/60), r=s%60; return (m<10?"0":"")+m+":"+(r<10?"0":"")+r; }
+/* ---------- 铃声（WebAudio 合成，无素材依赖；失败静默） ---------- */
+var callActx=null;
+function callTone(kind){
+  try{
+    if(!callActx) callActx=new (window.AudioContext||window.webkitAudioContext)();
+    if(callActx.state==="suspended") callActx.resume().catch(function(){});
+    var t=callActx.currentTime;
+    var g=callActx.createGain(); g.connect(callActx.destination);
+    g.gain.setValueAtTime(0,t);
+    var f=callActx.createOscillator(); f.connect(g);
+    f.frequency.value=(kind==="in")?880:440;
+    if(kind==="in"){    /* 被叫：双短音 */
+      g.gain.setValueAtTime(.12,t); g.gain.setValueAtTime(0,t+.35);
+      g.gain.setValueAtTime(.12,t+.55); g.gain.setValueAtTime(0,t+.9);
+      f.start(t); f.stop(t+.95);
+    } else {            /* 主叫回铃：一长音 */
+      g.gain.setValueAtTime(.08,t); g.gain.setValueAtTime(0,t+1);
+      f.start(t); f.stop(t+1.05);
+    }
+  }catch(e){}
+}
+function callRing(kind){
+  callRingStop();
+  callTone(kind);
+  callState.ringT=setInterval(function(){ callTone(kind); }, kind==="in"?2000:3000);
+}
+function callRingStop(){
+  if(callState && callState.ringT){ clearInterval(callState.ringT); callState.ringT=null; }
+  try{ if(navigator.vibrate) navigator.vibrate(0); }catch(e){}
+}
+/* ---------- 原生音频模式（听筒/扬声器路由，仅 Android 端生效） ---------- */
+function callNativeBegin(){
+  if(typeof App!=="undefined" && App && App.callAudioBegin){ try{ App.callAudioBegin(); }catch(e){} }
+}
+function callNativeEnd(){
+  if(typeof App!=="undefined" && App && App.callAudioEnd){ try{ App.callAudioEnd(); }catch(e){} }
+}
+/* ---------- 统一清理 ---------- */
+function callCleanup(msg){
+  var c=callState; if(!c) return;
+  if(c.ringT) clearInterval(c.ringT);
+  if(c.timer) clearInterval(c.timer);
+  if(c.noAns) clearTimeout(c.noAns);
+  if(c.connT) clearTimeout(c.connT);
+  try{ if(c.local) c.local.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+  try{ if(c.pc) c.pc.close(); }catch(e){}
+  /* 远端音频复位 */
+  var au=document.getElementById("callRemote");
+  if(au){ try{ au.pause(); au.srcObject=null; }catch(e){} }
+  callNativeEnd();
+  callRingStop();
+  callState=null;
+  var el=document.getElementById("callPage");
+  if(el){ el.classList.remove("on"); el.innerHTML=""; }
+  if(msg) toast(msg,"info");
 }
 /* v9.90：右上角三条杠 → 轻量弹出更多操作（删除好友 / 拉黑 / 取消拉黑） */
 function profileMore(){
@@ -10336,6 +10755,16 @@ function handleAct(act,el){
     case "momentVisPick": { var mvp=el.getAttribute("data-id"), mvv=el.getAttribute("data-vis"); if(mvp) momentVisPick(parseInt(mvp,10), mvv||""); break; }
     case "momentVisPickDo": { var mvpd=el.getAttribute("data-id"), mvpdv=el.getAttribute("data-vis"); if(mvpd&&mvpdv) momentVisPickDo(parseInt(mvpd,10), mvpdv); break; }
     case "profileMore": profileMore(); break;
+    /* v9.125：语音通话（发起/来电/接听/拒绝/取消/挂断/麦克风/扬声器） */
+    case "profileCall": profileCall(); break;
+    case "callVoice": { var cv=profileState; if(cv) voiceCallStart(cv.id, cv.nickname, cv.avatar); break; }
+    case "callVideo": toast("视频通话开发中，敬请期待","info"); break;
+    case "callAccept": callAccept(); break;
+    case "callReject": callReject(); break;
+    case "callCancel": callCancel(); break;
+    case "callHangup": callHangup(); break;
+    case "callMic": callToggleMic(); break;
+    case "callSpeaker": callToggleSpeaker(); break;
     case "msgRevoke": { var mrv=el.getAttribute("data-id"); if(mrv) msgRevokeDo(parseInt(mrv,10)); break; }
     case "msgRevokeGo": { var mrvg=el.getAttribute("data-id"); if(mrvg) msgRevokeGo(parseInt(mrvg,10)); break; }
     case "notifPermGo": notifPermGo(); break;

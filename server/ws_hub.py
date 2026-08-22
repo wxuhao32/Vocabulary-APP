@@ -19,6 +19,7 @@ import logging
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+import call as call_router   # v9.125：语音通话信令（call_* 上行白名单 + 断线收敛）
 import db
 import security
 from routers.auth import _check_banned
@@ -146,13 +147,25 @@ async def handle_ws(websocket: WebSocket) -> None:
                 obj = None
             if isinstance(obj, dict) and obj.get("type") == "ping":
                 await websocket.send_text(json.dumps({"type": "pong"}))
-            # 其余客户端消息一律忽略：本通道不允许客户端订阅/指定接收者
+            # v9.125：通话信令白名单放行（call_* 消息由 call 模块校验身份/关系后转发，
+            # 其余客户端消息仍一律忽略：本通道不允许客户端订阅/指定任意接收者）
+            elif isinstance(obj, dict) and str(obj.get("type") or "").startswith("call_"):
+                try:
+                    await call_router.handle_call_signal(hub, user, obj)
+                except Exception as e:
+                    log.warning("call signal error uid=%s type=%s err=%s",
+                                user_id, obj.get("type"), e)
     except WebSocketDisconnect:
         pass
     except Exception as e:
         log.debug("ws closed uid=%s err=%s", user_id, e)
     finally:
         await hub.unregister(user_id, websocket)
+        # v9.125：信令断开 → 通话状态收敛（响铃中=取消；通话中=按挂断处理并通知对端）
+        try:
+            await call_router.on_ws_disconnected(hub, user_id)
+        except Exception as e:
+            log.warning("call disconnect cleanup error uid=%s err=%s", user_id, e)
 
 
 def _authenticate(token: str):

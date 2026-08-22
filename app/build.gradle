@@ -38,15 +38,21 @@ android {
            v9.115：日志诊断模式（消息生命周期/通知/键盘全链路日志上报服务端），让用户能区分新旧包
            v9.117：聊天会话体验优化（发送后输入法保持展开 / 文件上传圆形进度环 + 失败重试 / 图片发送本地立即显示 / 文件下载进度反馈 + 真机保存到设备），让用户能区分新旧包
            v9.118：系统通知栏完善 + 修复跨会话泄漏（pending/ack 会话成员过滤 + 排除已读 + 服务通知低调化）
-           v9.119：语音消息（按开闭原则扩展——复用文件上传/消息持久化/WS 实时通道；新增 mic/pause/keyboard 图标 + 录音条 UI + MediaRecorder 录制 + 上滑取消 + 语音条播放缓存）*/
-        versionCode 88
-        versionName '9.123'
+           v9.119：语音消息（按开闭原则扩展——复用文件上传/消息持久化/WS 实时通道；新增 mic/pause/keyboard 图标 + 录音条 UI + MediaRecorder 录制 + 上滑取消 + 语音条播放缓存）
+           v9.125：一对一语音通话（WebRTC P2P + 免费 STUN；WS 信令 + 通话全屏页 + 听筒/扬声器原生路由 + 通话记录落库）
+           v9.126：通话连接修复（setRemoteDescription 参数嵌套错误致接通即挂断；ICE 队列排水；补国内免费 STUN；30s 连接兜底）
+           v9.127：通话音频修复（WebView 自动播放策略致主叫无声；显式 AEC/降噪/自动增益抑制回音啸叫；播放被拒自动重试）*/
+        versionCode 91
+        versionName '9.127'
     }
 
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            /* v9.125：release 用 debug keystore 签名 —— 历史版本（v9.77~v9.123）均为 debug keystore
+               签名，保持证书一致才能覆盖安装升级；毕设项目无应用商店发布需求，不引入正式 keystore */
+            signingConfig signingConfigs.debug
         }
         debug {
             minifyEnabled false

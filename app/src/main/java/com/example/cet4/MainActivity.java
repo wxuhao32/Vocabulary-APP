@@ -13,6 +13,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -124,6 +125,10 @@ public class MainActivity extends ComponentActivity {
         ws.setDisplayZoomControls(false);
         ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         ws.setAllowUniversalAccessFromFileURLs(true);
+        /* v9.127：语音通话远端音频自动播放 —— WebView 默认要求"新鲜"用户手势，
+           主叫发起通话的手势在等待接听期间过期 → ontrack 时 au.play() 被静默拒绝 → 主叫听不到对方。
+           关闭该限制后通话音频（WebRTC 流）可随连接到达自动播放 */
+        ws.setMediaPlaybackRequiresUserGesture(false);
 
         webView.setVerticalScrollBarEnabled(true);
         webView.setHorizontalScrollBarEnabled(false);
@@ -1434,6 +1439,59 @@ public class MainActivity extends ComponentActivity {
                 NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
                 nm.cancel(id);
             } catch (Throwable ignored) {}
+        }
+
+        /* ===== v9.125：语音通话音频模式（听筒/扬声器路由，仅 Android 端生效） ===== */
+
+        private AudioManager audioMgr() {
+            return (AudioManager) getSystemService(AUDIO_SERVICE);
+        }
+
+        /* 通话开始：进入通信模式（MODE_IN_COMMUNICATION），WebRTC 音频走通话路由（听筒 + 回声消除） */
+        @JavascriptInterface
+        public void callAudioBegin() {
+            try {
+                AudioManager am = audioMgr();
+                if (am == null) return;
+                runOnUiThread(() -> {
+                    try {
+                        am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                        am.setSpeakerphoneOn(false);   /* 默认听筒 */
+                    } catch (Throwable t) { Log.w(TAG, "callAudioBegin EX", t); }
+                });
+            } catch (Throwable t) { Log.w(TAG, "callAudioBegin EX", t); }
+        }
+
+        /* 通话结束：恢复普通模式，扬声器复位 */
+        @JavascriptInterface
+        public void callAudioEnd() {
+            try {
+                AudioManager am = audioMgr();
+                if (am == null) return;
+                runOnUiThread(() -> {
+                    try {
+                        am.setMode(AudioManager.MODE_NORMAL);
+                        am.setSpeakerphoneOn(false);
+                    } catch (Throwable t) { Log.w(TAG, "callAudioEnd EX", t); }
+                });
+            } catch (Throwable t) { Log.w(TAG, "callAudioEnd EX", t); }
+        }
+
+        /* 通话中切换扬声器（false=听筒 true=扬声器） */
+        @JavascriptInterface
+        public void callSetSpeaker(boolean on) {
+            try {
+                AudioManager am = audioMgr();
+                if (am == null) return;
+                runOnUiThread(() -> {
+                    try {
+                        if (am.getMode() != AudioManager.MODE_IN_COMMUNICATION) {
+                            am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                        }
+                        am.setSpeakerphoneOn(on);
+                    } catch (Throwable t) { Log.w(TAG, "callSetSpeaker EX", t); }
+                });
+            } catch (Throwable t) { Log.w(TAG, "callSetSpeaker EX", t); }
         }
 
         /* ===== v9.112：消息通知服务（原生层系统通知栏推送，App 后台/WebView 不可用时保障通知） ===== */

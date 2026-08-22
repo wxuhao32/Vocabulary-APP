@@ -278,6 +278,12 @@ public class NotifyService extends Service {
         String nick = friend.optString("nickname", "好友");
         String title = "来自「" + nick + "」的消息";
         String notifType = "file".equals(type) ? "file_message" : "new_message";
+        /* v9.125：通话记录消息（content 为 JSON {event,duration}）→ 可读文案，避免通知栏裸 JSON */
+        if ("call".equals(type)) {
+            content = callRecordText(content);
+            title = "与「" + nick + "」的通话";
+            notifType = "new_message";
+        }
         /* v9.114 日志诊断：通知链路全记录（标题/正文/notifId/显示结果/ack） */
         reportLog("NWS", "handle mid=" + mid + " pid=" + pid + " type=" + type
                 + " title=" + title + " content=" + (content.length() > 30 ? content.substring(0, 30) : content));
@@ -289,6 +295,22 @@ public class NotifyService extends Service {
         } else {
             reportLog("NWS", "通知未显示 notifId=" + notifId(mid) + " mid=" + mid + " → 不 ack（留 pending）");
         }
+    }
+
+    /* v9.125：通话记录 content(JSON {event,duration}) → 可读文案（与服务端 call.record_text 一致） */
+    private static String callRecordText(String contentJson) {
+        try {
+            JSONObject o = new JSONObject(contentJson == null ? "{}" : contentJson);
+            String ev = o.optString("event", "");
+            int dur = Math.max(0, o.optInt("duration", 0));
+            switch (ev) {
+                case "end":     return String.format("通话 %02d:%02d", dur / 60, dur % 60);
+                case "missed":  return "未接听";
+                case "rejected":return "已拒绝";
+                case "canceled":return "已取消";
+                default:        return "通话";
+            }
+        } catch (Throwable t) { return "通话"; }
     }
 
     private void pullPending() {
@@ -317,9 +339,13 @@ public class NotifyService extends Service {
                         if (pid.equals(fg)) { ackIds.add(mid); continue; }   // 前台聊天：不通知（仍 ack）
                         String type = m.optString("type", "text");
                         String nick = m.optJSONObject("friend") == null ? "好友" : m.optJSONObject("friend").optString("nickname", "好友");
+                        /* v9.125：通话记录转可读文案 */
+                        String mContent = m.optString("content", "");
+                        String mTitle = "来自「" + nick + "」的消息";
+                        if ("call".equals(type)) { mContent = callRecordText(mContent); mTitle = "与「" + nick + "」的通话"; }
                         /* v9.114：仅真正显示才 ack（权限缺失留在 pending 等授权后补发） */
-                        if (showNotification(notifId(mid), "来自「" + nick + "」的消息",
-                                m.optString("content", ""), "file".equals(type) ? "file_message" : "new_message", pid)) {
+                        if (showNotification(notifId(mid), mTitle,
+                                mContent, "file".equals(type) ? "file_message" : "new_message", pid)) {
                             ackIds.add(mid);
                         }
                     }

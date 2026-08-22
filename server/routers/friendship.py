@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+import call as call_mod   # v9.125：通话记录摘要文案
 import db
 import social_util as su
 import ws_hub
@@ -208,6 +209,9 @@ def friends_list(user=Depends(require_user)):
         if last_msg:
             if last_msg["revoked"]:
                 last_txt = "你撤回了一条消息" if last_msg["sender_id"] == me else "对方撤回了一条消息"
+            elif last_msg["type"] == "call":
+                # v9.125：通话记录摘要（content 为 JSON，转成可读文案）
+                last_txt = call_mod.record_text(last_msg["content"])
             else:
                 last_txt = last_msg["content"] or ""
         out.append({
