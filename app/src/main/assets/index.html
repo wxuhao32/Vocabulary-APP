@@ -3942,6 +3942,13 @@ function doLogin(data){
   try{ wsConnect(); }catch(e){}
   /* v9.112：登录后同步 Token 并启动原生通知服务（App 后台/离线时系统通知栏推送） */
   try{ syncNativeAuth(); startNativeNotify(); }catch(e){}
+  /* v9.130：登录后申请通知权限（Android 13+ 不申请则系统通知静默失效，仅弹一次系统对话框） */
+  try{
+    if(typeof App!=="undefined" && App && typeof App.getNotifPermission==="function"
+       && typeof App.requestNotifPermission==="function" && !App.getNotifPermission()){
+      setTimeout(function(){ try{ App.requestNotifPermission(); }catch(e){} }, 600);
+    }
+  }catch(e){}
 }
 
 /* ---------- 注册（真实 API：图形验证码 + 短信验证码 + Argon2id） ---------- */
@@ -5960,12 +5967,13 @@ function notifPermText(){
 window.__onNotifPerm = function(granted){
   if(granted){ toast("通知权限已开启","ok",2500); } else { toast("通知权限未开启，App 内提醒不受影响","warn",3000); }
 };
-/* 原生回调：点击系统通知 → 跳转对应页面 */
-window.__onNotifTap = function(type, pid){
+/* 原生回调：点击系统通知 → 跳转对应页面
+   v9.130：携带发送者昵称（通知栏合并通知的 nt_nick）——聊天页顶栏显示真实昵称 */
+window.__onNotifTap = function(type, pid, nick){
   if(!isLoggedIn()){ toast("请先登录查看","ok",2000); return; }
   try{
     if(type==="friend_request"){ openRequestsPage(); }
-    else if((type==="new_message"||type==="file_message") && pid){ openChatPage(pid, "聊天"); }
+    else if((type==="new_message"||type==="file_message") && pid){ openChatPage(pid, nick||"聊天"); }
     else { openFriendsPage(); }
   }catch(e){}
 };
@@ -11223,7 +11231,7 @@ try{ bindImeFit(); }catch(e){}
 try{ if(typeof checkAppUpdate==="function") setTimeout(checkAppUpdate, 1200); }catch(e_upd){}
 /* v9.85：启动时恢复本地 Token（Access + Refresh 持久化），登录态跨重启保持 */
 loadTokens();
-if(isLoggedIn()){ setTimeout(function(){ ensureUser(); }, 400); setTimeout(function(){ pollSocial(); }, 1200); setInterval(function(){ pollSocial(); }, 15000); setTimeout(function(){ wsConnect(); }, 600); setTimeout(function(){ syncNativeAuth(); startNativeNotify(); }, 800);
+if(isLoggedIn()){ setTimeout(function(){ ensureUser(); }, 400); setTimeout(function(){ pollSocial(); }, 1200); setInterval(function(){ pollSocial(); }, 15000); setTimeout(function(){ wsConnect(); }, 600); setTimeout(function(){ syncNativeAuth(); startNativeNotify(); setFgChat(""); }, 800); /* v9.130：启动复位前台会话——Activity 重建（旋转/回收）后 WebView 重载回首页，但原生静态 foregroundChatPid 仍是旧聊天对象，不复位会误吞该好友的新消息通知 */
   /* v9.114：聊天通知渠道被用户关闭时静默无通知 → 登录后提示开启（Android 13+ 常见盲区） */
   setTimeout(function(){ try{
     if(typeof App!=="undefined" && App && typeof App.getNotifChannelImpt==="function" && App.getNotifChannelImpt()===0){

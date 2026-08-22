@@ -250,17 +250,20 @@ public class MainActivity extends ComponentActivity {
         }
     }
 
-    /* 通知点击 → 回到 App 并跳转对应页面（type: friend_request / new_message / file_message） */
+    /* 通知点击 → 回到 App 并跳转对应页面（type: friend_request / new_message）
+       v9.130：携带发送者昵称（nt_nick）——聊天页顶栏直接显示真实昵称而非"聊天"占位 */
     private void handleNotifTap(Intent intent) {
         if (intent == null || !intent.hasExtra("nt_type")) return;
         final String type = intent.getStringExtra("nt_type");
         final String pid = intent.getStringExtra("nt_pid");
+        final String nick = intent.getStringExtra("nt_nick");
         intent.removeExtra("nt_type");  // 防止重复触发
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             try {
                 runJs("try{ window.__onNotifTap && window.__onNotifTap("
                         + org.json.JSONObject.quote(type == null ? "" : type) + ","
-                        + org.json.JSONObject.quote(pid == null ? "" : pid) + "); }catch(e){}");
+                        + org.json.JSONObject.quote(pid == null ? "" : pid) + ","
+                        + org.json.JSONObject.quote(nick == null ? "" : nick) + "); }catch(e){}");
             } catch (Throwable ignored) {}
         }, 1200);  // 等待页面加载/就绪
     }
@@ -1523,10 +1526,11 @@ public class MainActivity extends ComponentActivity {
         }
 
         /* 通知服务：当前正在查看的好友 public_id（空串 = 不在任何聊天界面）。
-           该好友的新消息不弹系统通知（避免聊天界面 + 通知栏双份），直接标记已推送。 */
+           该好友的新消息不弹系统通知（避免聊天界面 + 通知栏双份），直接标记已推送。
+           v9.130：进入聊天页时顺手清除该好友的会话通知（消息已当面看到）。 */
         @JavascriptInterface
         public void setForegroundChat(String pid) {
-            NotifyService.foregroundChatPid = (pid == null ? "" : pid);
+            NotifyService.onEnterChat(MainActivity.this, pid);
         }
 
         /* 登录/刷新 Token 同步给通知服务（SharedPreferences 持久化，Service 重启后可恢复） */

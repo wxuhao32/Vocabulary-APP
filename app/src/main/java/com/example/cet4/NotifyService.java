@@ -54,7 +54,9 @@ import okio.ByteString;
  *    该好友的新消息不弹通知、直接 ack（避免"聊天界面收到 + 通知栏又出现"双份）
  * 5. 已读独立：notified（已推送通知）与 read_at（已读）是服务端两个独立字段；
  *    只有用户真正进入聊天（list_messages）才标记已读
- * 6. 点击通知 → MainActivity（nt_type/nt_pid）→ JS __onNotifTap → 打开对应聊天
+ * 6. 点击通知 → MainActivity（nt_type/nt_pid/nt_nick）→ JS __onNotifTap → 打开对应聊天
+ * v9.130：按会话合并通知 —— 同一好友的连续消息更新同一通知（不再每条消息一个通知刷屏），
+ *    标题「来自 XXX 的消息」+ 最新内容 + 累计条数；通话记录消息不弹通知（用户刚通完话无需提醒）。
  */
 public class NotifyService extends Service {
 
@@ -62,9 +64,6 @@ public class NotifyService extends Service {
     private static final String CH_SVC = "cet4_notify_svc";   // 前台服务常驻通知渠道
     private static final String CH_MSG = "cet4_social";       // 业务通知渠道（复用 MainActivity）
     private static final int FGS_ID = 1001;
-    /** 聊天通知 id 偏移：通知 id = 1000000 + mid%1000000，绝不与前台通知 FGS_ID(1001) 冲突
-        （此前直接用 mid 作为通知 id，当消息 id 恰好为 1001 时会把前台"运行中"通知顶掉/被顶掉） */
-    private static int notifId(long mid) { return 1000000 + (int) (mid % 1000000L); }
     private static final String PREFS = "cet4_auth";
     private static final MediaType JSON_TYPE = MediaType.get("application/json; charset=utf-8");
     private static final long HEARTBEAT_MS = 25000;
@@ -74,6 +73,37 @@ public class NotifyService extends Service {
 
     /** 前台聊天好友 public_id（由 JS setForegroundChat 更新；空 = 不在任何聊天界面） */
     public static volatile String foregroundChatPid = "";
+
+    /* ===================== v9.130 按会话合并通知 ===================== */
+    /** 会话通知状态（进程内存）：pid → 昵称/累计条数/最新内容 */
+    private static final class ConvState {
+        String nick = ""; int count = 0;
+    }
+    private static final java.util.Map<String, ConvState> convStates = new java.util.HashMap<>();
+    /** 已通知消息 mid → pid（撤销时定位会话通知 + WS/pending 双通道去重；上限 500 防 OOM） */
+    private static final java.util.Map<Long, String> midPid =
+            new java.util.LinkedHashMap<Long, String>(256, 0.75f, false) {
+                @Override
+                protected boolean removeEldestEntry(java.util.Map.Entry<Long, String> eldest) {
+                    return size() > 500;
+                }
+            };
+    /** 会话通知 id：2000000 + |pid.hashCode()|%900000（避开 FGS_ID(1001) 与旧 mid 通知段 1000000+） */
+    private static int convNotifId(String pid) {
+        int h = Math.abs(pid == null ? 0 : pid.hashCode()) % 900000;
+        return 2000000 + h;
+    }
+    /** v9.130：进入某好友聊天页 → 该好友会话通知立即清除（消息已当面看到，通知失义） */
+    public static void onEnterChat(Context ctx, String pid) {
+        foregroundChatPid = pid == null ? "" : pid;
+        String p = foregroundChatPid;
+        if (ctx == null || p.isEmpty()) return;
+        try {
+            NotificationManager nm = (NotificationManager) ctx.getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancel(convNotifId(p));
+            synchronized (convStates) { convStates.remove(p); }
+        } catch (Throwable ignored) {}
+    }
 
     private OkHttpClient client;
     private WebSocket ws;
@@ -230,13 +260,23 @@ public class NotifyService extends Service {
                     reportLog("NWS", "WS 收到 new_message t=" + System.currentTimeMillis());   /* v9.114 诊断 */
                     handleNewMessage(obj);
                 } else if ("revoked".equals(type)) {
-                    // 对方撤回消息 → 通知栏同步撤销（通知 id == notifId(消息 id)）
+                    // v9.130：对方撤回消息 → 该会话通知整体撤销（合并通知内容已失真，直接清除；
+                    // 经 midPid 定位会话；服务重启后映射丢失则跳过——通知已被点开或无残留）
                     JSONArray ids = obj.optJSONArray("ids");
                     if (ids != null) {
                         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-                        for (int i = 0; i < ids.length(); i++) {
-                            long mid = ids.optLong(i, -1);
-                            if (mid > 0 && nm != null) nm.cancel(notifId(mid));
+                        java.util.Set<String> hitPids = new java.util.HashSet<>();
+                        synchronized (midPid) {
+                            for (int i = 0; i < ids.length(); i++) {
+                                long mid = ids.optLong(i, -1);
+                                String pid = mid > 0 ? midPid.get(mid) : null;
+                                if (pid != null) hitPids.add(pid);
+                            }
+                        }
+                        for (String pid : hitPids) {
+                            if (nm != null) nm.cancel(convNotifId(pid));
+                            synchronized (convStates) { convStates.remove(pid); }
+                            reportLog("NWS", "revoked → 撤销会话通知 pid=" + pid);
                         }
                     }
                 }
@@ -260,60 +300,43 @@ public class NotifyService extends Service {
     }
 
     /* ---------------- 消息处理：通知 + 幂等 ack ---------------- */
+    /* v9.130：消息正文预览 —— 服务端 content 均为可读文本（语音"[语音] N秒"/文件"[文件] 名"），
+       仅做长度截断防通知栏溢出 */
+    private static String msgPreview(String content) {
+        String c = content == null ? "" : content.trim();
+        if (c.length() > 120) c = c.substring(0, 120) + "…";
+        return c.isEmpty() ? "新消息" : c;
+    }
+
     private void handleNewMessage(JSONObject obj) {
         JSONObject msg = obj.optJSONObject("message");
         JSONObject friend = obj.optJSONObject("friend");
         if (msg == null || friend == null) return;
         long mid = msg.optLong("id", -1);
         String pid = friend.optString("id", "");
-        if (mid <= 0) return;
+        if (mid <= 0 || pid.isEmpty()) return;
+        String type = msg.optString("type", "text");
+        /* v9.130：通话记录不弹系统通知（双方刚通完话无需提醒；服务端已 notified=1，
+           此处直接吞掉 WS 推送，避免通话结束双方各收一条"通话 xx:xx"） */
+        if ("call".equals(type)) return;
         String fg = foregroundChatPid == null ? "" : foregroundChatPid;
         if (pid.equals(fg)) {
             // 正在看该好友聊天：不弹通知，ack 标记已处理（避免重连补拉重复通知）
             ack(new long[]{mid});
             return;
         }
-        String type = msg.optString("type", "text");
-        String content = msg.optString("content", "");
         String nick = friend.optString("nickname", "好友");
-        String title = "来自「" + nick + "」的消息";
-        String notifType = "file".equals(type) ? "file_message" : "new_message";
-        /* v9.125：通话记录消息（content 为 JSON {event,duration}）→ 可读文案，避免通知栏裸 JSON */
-        if ("call".equals(type)) {
-            content = callRecordText(content);
-            title = "与「" + nick + "」的通话";
-            notifType = "new_message";
-        }
-        /* v9.114 日志诊断：通知链路全记录（标题/正文/notifId/显示结果/ack） */
+        String content = msgPreview(msg.optString("content", ""));
         reportLog("NWS", "handle mid=" + mid + " pid=" + pid + " type=" + type
-                + " title=" + title + " content=" + (content.length() > 30 ? content.substring(0, 30) : content));
+                + " content=" + (content.length() > 30 ? content.substring(0, 30) : content));
         /* v9.114：仅真正显示通知才 ack —— 通知权限缺失时消息留在 pending，
            授权后重连/重启自动补发（此前未显示也 ack 导致消息永久静默丢失） */
-        if (showNotification(notifId(mid), title, content, notifType, pid)) {
-            reportLog("NWS", "通知已显示 notifId=" + notifId(mid) + " mid=" + mid + " → ack");
+        if (showConvNotification(pid, nick, content, mid)) {
+            reportLog("NWS", "会话通知已显示 pid=" + pid + " mid=" + mid + " → ack");
             ack(new long[]{mid});
         } else {
-            reportLog("NWS", "通知未显示 notifId=" + notifId(mid) + " mid=" + mid + " → 不 ack（留 pending）");
+            reportLog("NWS", "会话通知未显示 pid=" + pid + " mid=" + mid + " → 不 ack（留 pending）");
         }
-    }
-
-    /* v9.125：通话记录 content(JSON {event,duration,media}) → 可读文案（与服务端 call.record_text 一致）
-       v9.129：media=video → 视频通话前缀 */
-    private static String callRecordText(String contentJson) {
-        try {
-            JSONObject o = new JSONObject(contentJson == null ? "{}" : contentJson);
-            String ev = o.optString("event", "");
-            int dur = Math.max(0, o.optInt("duration", 0));
-            boolean vid = "video".equals(o.optString("media", ""));
-            String pre = vid ? "视频通话" : "通话";
-            switch (ev) {
-                case "end":     return String.format("%s %02d:%02d", pre, dur / 60, dur % 60);
-                case "missed":  return vid ? "视频通话未接听" : "未接听";
-                case "rejected":return "已拒绝";
-                case "canceled":return "已取消";
-                default:        return pre;
-            }
-        } catch (Throwable t) { return "通话"; }
     }
 
     private void pullPending() {
@@ -335,20 +358,20 @@ public class NotifyService extends Service {
                         JSONObject m = arr.optJSONObject(i);
                         if (m == null) continue;
                         long mid = m.optLong("id", -1);
-                        String pid = m.optJSONObject("friend") == null ? "" : m.optJSONObject("friend").optString("id", "");
-                        String fg = foregroundChatPid == null ? "" : foregroundChatPid;
-                        if (mid <= 0) continue;
+                        JSONObject fr = m.optJSONObject("friend");
+                        String pid = fr == null ? "" : fr.optString("id", "");
+                        if (mid <= 0 || pid.isEmpty()) continue;
                         sb.append(mid).append(",");
+                        String fg = foregroundChatPid == null ? "" : foregroundChatPid;
                         if (pid.equals(fg)) { ackIds.add(mid); continue; }   // 前台聊天：不通知（仍 ack）
-                        String type = m.optString("type", "text");
-                        String nick = m.optJSONObject("friend") == null ? "好友" : m.optJSONObject("friend").optString("nickname", "好友");
-                        /* v9.125：通话记录转可读文案 */
-                        String mContent = m.optString("content", "");
-                        String mTitle = "来自「" + nick + "」的消息";
-                        if ("call".equals(type)) { mContent = callRecordText(mContent); mTitle = "与「" + nick + "」的通话"; }
+                        /* v9.130：通话记录仅 ack 不通知（历史遗留 notified=0 的记录直接消化） */
+                        if ("call".equals(m.optString("type", "text"))) { ackIds.add(mid); continue; }
+                        /* v9.130：WS 通道已通知过的消息跳过（WS 先到、ack 未落库时的竞态双发） */
+                        synchronized (midPid) { if (midPid.containsKey(mid)) { ackIds.add(mid); continue; } }
+                        String nick = fr.optString("nickname", "好友");
+                        String content = msgPreview(m.optString("content", ""));
                         /* v9.114：仅真正显示才 ack（权限缺失留在 pending 等授权后补发） */
-                        if (showNotification(notifId(mid), mTitle,
-                                mContent, "file".equals(type) ? "file_message" : "new_message", pid)) {
+                        if (showConvNotification(pid, nick, content, mid)) {
                             ackIds.add(mid);
                         }
                     }
@@ -445,38 +468,55 @@ public class NotifyService extends Service {
                 .build();
     }
 
-    /** 发送聊天消息通知。返回 true=已真正显示（调用方此时才 ack 幂等标记）。
+    /** v9.130：按会话发送合并通知（同一好友的连续消息更新同一通知，不刷屏）。
+        返回 true=已真正显示（调用方此时才 ack 幂等标记）。
         v9.114：权限缺失返回 false 且不抛错 —— 消息留在服务端 pending，授权后自动补发。 */
-    private boolean showNotification(int id, String title, String content, String type, String pid) {
+    private boolean showConvNotification(String pid, String nick, String content, long mid) {
         try {
             if (!hasNotifPermission()) {
-                Log.w(TAG, "通知权限未授予，跳过（消息保留 pending 待授权后补发）id=" + id);
-                reportLog("NWS", "showNotification 权限未授予 → 跳过 notifId=" + id);   /* v9.114 诊断 */
+                Log.w(TAG, "通知权限未授予，跳过（消息保留 pending 待授权后补发）pid=" + pid);
+                reportLog("NWS", "showConvNotification 权限未授予 → 跳过 pid=" + pid);
                 return false;
             }
             ensureChannels();
+            /* 累计状态：同好友连续消息 count+1，正文显示最新一条 */
+            int count;
+            synchronized (convStates) {
+                ConvState st = convStates.get(pid);
+                if (st == null) { st = new ConvState(); st.nick = nick; convStates.put(pid, st); }
+                st.count += 1;
+                count = st.count;
+            }
+            synchronized (midPid) { midPid.put(mid, pid); }
+            int id = convNotifId(pid);
+            /* 点击 → MainActivity(nt_type/nt_pid/nt_nick) → JS __onNotifTap → 直达该好友聊天页 */
             Intent intent = new Intent(this, MainActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            if (type != null) intent.putExtra("nt_type", type);
-            if (pid != null) intent.putExtra("nt_pid", pid);
+            intent.putExtra("nt_type", "new_message");
+            intent.putExtra("nt_pid", pid);
+            intent.putExtra("nt_nick", nick == null ? "" : nick);
             int flags = PendingIntent.FLAG_UPDATE_CURRENT;
             if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
             PendingIntent pi = PendingIntent.getActivity(this, id, intent, flags);
+            String body = count <= 1 ? content : "[" + count + " 条新消息] " + content;
             Notification.Builder nb = Build.VERSION.SDK_INT >= 26
                     ? new Notification.Builder(this, CH_MSG)
                     : new Notification.Builder(this);
             Notification n = nb
                     .setSmallIcon(android.R.drawable.ic_dialog_info)
-                    .setContentTitle(title == null ? "" : title)
-                    .setContentText(content == null ? "" : content)
+                    .setContentTitle("来自 " + (nick == null || nick.isEmpty() ? "好友" : nick) + " 的消息")
+                    .setContentText(body)
+                    .setStyle(new Notification.BigTextStyle().bigText(body))
+                    .setNumber(count)
+                    .setWhen(System.currentTimeMillis())
                     .setAutoCancel(true)
                     .setContentIntent(pi)
                     .build();
             NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
             if (nm != null) nm.notify(id, n);
-            Log.d(TAG, "通知已发: id=" + id + " pid=" + pid + " title=" + title);
+            Log.d(TAG, "会话通知已发: id=" + id + " pid=" + pid + " count=" + count);
             return true;
-        } catch (Throwable t) { Log.e(TAG, "showNotification EX", t); reportLog("NWS", "showNotification 异常 " + (t == null ? "" : t.toString())); return false; }
+        } catch (Throwable t) { Log.e(TAG, "showConvNotification EX", t); reportLog("NWS", "showConvNotification 异常 " + (t == null ? "" : t.toString())); return false; }
     }
 
     /** 由 MainActivity（JS 桥 setApiBase）调用：服务器地址变化 → 重连新地址 */

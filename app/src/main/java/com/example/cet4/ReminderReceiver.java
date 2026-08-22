@@ -36,6 +36,17 @@ public class ReminderReceiver extends BroadcastReceiver {
         if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
             // 开机后恢复每日闹钟（重启会清空 AlarmManager）
             if (enabled) scheduleReminder(ctx, hour, minute);
+            /* v9.130：已登录则恢复消息通知服务 —— 手机重启后 App 未打开也能收系统通知
+               （NotifyService 前台服务被重启清掉，登录态在 SharedPreferences） */
+            try {
+                String tok = ctx.getSharedPreferences("cet4_auth", Context.MODE_PRIVATE).getString("access", "");
+                if (tok != null && !tok.isEmpty()) {
+                    Intent svc = new Intent(ctx, NotifyService.class);
+                    if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(svc);
+                    else ctx.startService(svc);
+                    Log.d(TAG, "boot: NotifyService 已恢复（已登录）");
+                }
+            } catch (Throwable t) { Log.w(TAG, "boot NotifyService fail", t); }
             return;
         }
         if (!enabled) return;
