@@ -45,6 +45,9 @@ server/data/
 # Python 虚拟环境
 server/.venv/
 venv/
+
+# 测试脚本（仅本地使用，不上传）
+server/test_*.py
 # 公网 Tunnel 配置（含当前公网地址）
 server/tunnel_config.json
 # Cloudflared 客户端二进制（首次运行下载脚本获取）
